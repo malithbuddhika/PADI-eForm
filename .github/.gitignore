@@ -1,0 +1,12 @@
+# dependencies
+node_modules
+dist
+.env
+
+# editor folders
+.vscode
+.idea
+
+# system files
+.DS_Store
+Thumbs.db
