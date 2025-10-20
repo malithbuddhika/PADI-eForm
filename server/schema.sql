@@ -1,10 +1,66 @@
-CREATE DATABASE IF NOT EXISTS padi_eform;
-USE padi_eform;
+CREATE DATABASE IF NOT EXISTS padi;
+USE padi;
 
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS `user` (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
-  email VARCHAR(100) NOT NULL,
+  email VARCHAR(100) NOT NULL UNIQUE,
   birthday DATE NOT NULL,
   language VARCHAR(20) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS forms (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  signature_path VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
+);
+
+-- Separate tables for each form's data (one record per submission)
+CREATE TABLE IF NOT EXISTS form1_data (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  data JSON NOT NULL,
+  signature_path VARCHAR(255),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS form2_data (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  data JSON NOT NULL,
+  signature_path VARCHAR(255),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS form3_data (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  data JSON NOT NULL,
+  signature_path VARCHAR(255),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
+);
+
+-- Templates table (list of available PDF templates)
+CREATE TABLE IF NOT EXISTS templates (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  file_path VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Drafts table: stores per-user per-form draft data
+CREATE TABLE IF NOT EXISTS drafts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  form_step INT NOT NULL,
+  data JSON NOT NULL,
+  signature_path VARCHAR(255),
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
 );
