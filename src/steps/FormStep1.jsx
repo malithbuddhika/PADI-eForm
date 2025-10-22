@@ -33,7 +33,7 @@ export default function FormStep1 ({ user, draft, onDraft }) {
         </p>
 
         <p class="mb-6">
-            I, <span class="font-bold underline">(Please print full name)</span> ______, understand that as a diver, I should:
+            I, <input className=" font-bold underline" value={user?.name || ''} readOnly />, understand that as a diver, I should:
         </p>
 
         <ol class="list-decimal pl-5 mb-6 space-y-4">

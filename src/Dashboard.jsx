@@ -5,9 +5,9 @@ import FormStep3 from './steps/FormStep3.jsx';
 import { API_BASE } from './api'
 
 const steps = [
-  { id: 1, title: 'Form 1: Personal Info', desc: 'Personal information' },
-  { id: 2, title: 'Form 2: Professional Details', desc: 'Professional details' },
-  { id: 3, title: 'Form 3: Final Review', desc: 'Review and submit' },
+  { id: 1, title: 'Form ', desc: '1' },
+  { id: 2, title: 'Form ', desc: '2' },
+  { id: 3, title: 'Form ', desc: '3' },
 ];
 
 function Stepper({ current, completed, goTo }) {
