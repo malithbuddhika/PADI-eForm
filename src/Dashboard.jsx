@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import SignaturePad from './SignaturePad.jsx';
+import FormStep1 from './steps/FormStep1.jsx';
+import FormStep2 from './steps/FormStep2.jsx';
+import FormStep3 from './steps/FormStep3.jsx';
+import { API_BASE } from './api'
 
 const steps = [
   { id: 1, title: 'Form 1: Personal Info', desc: 'Personal information' },
@@ -12,15 +15,33 @@ function Stepper({ current, completed, goTo }) {
     <div className="flex items-center gap-4 mb-6">
       {steps.map((s) => {
         const status = completed.includes(s.id) ? 'completed' : s.id === current ? 'current' : 'upcoming';
+        // define clear class sets for each status so colors are distinct
+        const base = 'flex items-center gap-3 px-3 py-2 rounded-md transition-colors';
+        const statusBtnClass = status === 'completed'
+          ? `${base} bg-green-600 hover:bg-green-700 text-white`
+          : status === 'current'
+            ? `${base} bg-blue-600 hover:bg-blue-700 text-white shadow`
+            : `${base} bg-gray-100 text-gray-700 opacity-80 cursor-not-allowed`;
+
+        const badgeClass = status === 'completed'
+          ? 'w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center text-xs'
+          : status === 'current'
+            ? 'w-6 h-6 rounded-full bg-white text-blue-600 flex items-center justify-center font-semibold border-2 border-blue-600'
+            : 'w-6 h-6 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-sm';
+
         return (
           <button
             key={s.id}
             onClick={() => goTo(s.id)}
             disabled={status === 'upcoming'}
-            className={`flex items-center gap-2 px-3 py-2 rounded ${status === 'completed' ? 'bg-green-100' : status === 'current' ? 'bg-blue-100' : 'bg-gray-100 opacity-60'}`}
+            aria-disabled={status === 'upcoming'}
+            className={statusBtnClass}
           >
-            <span className="font-semibold">{status === 'completed' ? '✓' : s.id}</span>
-            <span className="text-sm">{s.title}</span>
+            <span className={badgeClass}>{status === 'completed' ? '✓' : s.id}</span>
+            <div className="text-left">
+              <div className="text-sm font-medium">{s.title}</div>
+              <div className="text-xs text-gray-500">{s.desc}</div>
+            </div>
           </button>
         );
       })}
@@ -36,14 +57,15 @@ export default function Dashboard({ userId }) {
 
   useEffect(() => {
     if (!userId) return;
-    fetch(`http://localhost:4000/api/users/${userId}`)
-      .then(r => r.json())
+
+  fetch(`${API_BASE}/api/users/${userId}`)
+      .then((r) => r.json())
       .then(setUser)
       .catch(console.error);
 
     // load completion status
-    fetch(`http://localhost:4000/api/form-status/${userId}`)
-      .then(r => r.json())
+  fetch(`${API_BASE}/api/form-status/${userId}`)
+      .then((r) => r.json())
       .then((s) => {
         const done = [];
         if (s.form1) done.push(1);
@@ -52,43 +74,61 @@ export default function Dashboard({ userId }) {
         setCompleted(done);
         // set current to first incomplete
         setCurrent(done.includes(1) && !done.includes(2) ? 2 : done.includes(2) && !done.includes(3) ? 3 : done.length === 3 ? 3 : 1);
-      });
+      })
+      .catch(() => {});
+
     // load drafts for steps
-    Promise.all([1,2,3].map(step =>
-      fetch(`http://localhost:4000/api/draft/${userId}/${step}`).then(r => r.json()).catch(() => null)
-    )).then(([d1,d2,d3]) => {
-      setDrafts({
-        1: d1 ? { ...d1.data, signature: d1.signature } : null,
-        2: d2 ? { ...d2.data, signature: d2.signature } : null,
-        3: d3 ? { ...d3.data, signature: d3.signature } : null,
-      });
-    }).catch(() => {});
+    Promise.all([1, 2, 3].map((step) =>
+  fetch(`${API_BASE}/api/draft/${userId}/${step}`).then((r) => r.json()).catch(() => null)
+    ))
+      .then(([d1, d2, d3]) => {
+        setDrafts({
+          1: d1 ? { ...d1.data, signature: d1.signature } : null,
+          2: d2 ? { ...d2.data, signature: d2.signature } : null,
+          3: d3 ? { ...d3.data, signature: d3.signature } : null,
+        });
+      })
+      .catch(() => {});
   }, [userId]);
 
   const goTo = (step) => {
-    // only allow if step <= first incomplete + 1
-    const max = Math.max(1, ...completed) + 1;
+    // only allow if step <= (highest completed or 0) + 1
+    const highestCompleted = completed.length ? Math.max(...completed) : 0;
+    const max = highestCompleted + 1;
     if (step <= max) setCurrent(step);
   };
 
-  const saveStep = async (step, data, signature) => {
-    // Save to server
-    const res = await fetch(`http://localhost:4000/api/form/${step}`, {
+  // Save draft (does NOT mark step completed)
+  const saveDraft = async (step, data, signature) => {
+  const res = await fetch(`${API_BASE}/api/draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, form_step: step, data, signature }),
+    });
+    if (res.ok) {
+      setDrafts((prev) => ({ ...prev, [step]: { ...data, signature } }));
+      if (step < 3) setCurrent(step + 1);
+      return true;
+    }
+    return false;
+  };
+
+  // Final submit for a step (marks completed)
+  const submitStep = async (step, data, signature) => {
+  const res = await fetch(`${API_BASE}/api/form/${step}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, data, signature }),
     });
     if (res.ok) {
-      // mark completed
       setCompleted((c) => Array.from(new Set([...c, step])));
-      // update draft so going back shows values
       setDrafts((prev) => ({ ...prev, [step]: { ...data, signature } }));
-      // auto advance
       if (step < 3) setCurrent(step + 1);
-      alert('Saved');
-    } else {
-      alert('Save failed');
+      alert('Submitted');
+      return true;
     }
+    alert('Submit failed');
+    return false;
   };
 
   const back = () => setCurrent((c) => Math.max(1, c - 1));
@@ -104,119 +144,15 @@ export default function Dashboard({ userId }) {
 
         <div className="mt-4">
           {current === 1 && (
-            <FormStep1 user={user} draft={drafts[1]} onSave={(data, sig) => saveStep(1, data, sig)} />
+            <FormStep1 user={user} draft={drafts[1]} onDraft={(data, sig) => saveDraft(1, data, sig)} />
           )}
           {current === 2 && (
-            <FormStep2 user={user} draft={drafts[2]} onSave={(data, sig) => saveStep(2, data, sig)} onBack={back} />
+            <FormStep2 user={user} draft={drafts[2]} onDraft={(data, sig) => saveDraft(2, data, sig)} onBack={back} />
           )}
           {current === 3 && (
-            <FormStep3 user={user} draft={drafts[3]} onSave={(data, sig) => saveStep(3, data, sig)} onBack={back} />
+            <FormStep3 user={user} draft={drafts[3]} onSubmit={(data, sig) => submitStep(3, data, sig)} onBack={back} />
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function FormStep1({ user, draft, onSave }) {
-  const [fieldA, setFieldA] = useState(draft?.fieldA || '');
-  const [signature, setSignature] = useState(draft?.signature || '');
-
-  useEffect(() => {
-    setFieldA(draft?.fieldA || '');
-    setSignature(draft?.signature || '');
-  }, [draft]);
-  return (
-    <div>
-      <h2 className="text-lg font-semibold">Personal Info</h2>
-      <p className="text-sm text-gray-600">Please confirm your personal information.</p>
-      <div className="mt-3">
-        <label className="block text-sm">Full name</label>
-        <input className="w-full border p-2 rounded bg-gray-100" value={user.name} readOnly />
-      </div>
-      <div className="mt-3">
-        <label className="block text-sm">A field</label>
-        <input className="w-full border p-2 rounded" value={fieldA} onChange={e => setFieldA(e.target.value)} />
-      </div>
-      <div className="mt-3">
-        <label className="block text-sm">Signature</label>
-        <SignaturePad
-          onChange={setSignature}
-          initialData={signature && !signature.startsWith('data:') ? `/signatures/${signature}` : signature}
-        />
-      </div>
-      <div className="mt-3 flex justify-end gap-2">
-        <button onClick={() => onSave({ fieldA }, signature)} className="px-4 py-2 bg-blue-600 text-white rounded">Next</button>
-      </div>
-    </div>
-  );
-}
-
-function FormStep2({ user, draft, onSave, onBack }) {
-  const [fieldB, setFieldB] = useState(draft?.fieldB || '');
-  const [signature, setSignature] = useState(draft?.signature || '');
-
-  useEffect(() => {
-    setFieldB(draft?.fieldB || '');
-    setSignature(draft?.signature || '');
-  }, [draft]);
-  return (
-    <div>
-      <h2 className="text-lg font-semibold">Professional Details</h2>
-      <p className="text-sm text-gray-600">Enter your professional details.</p>
-      <div className="mt-3">
-        <label className="block text-sm">Full name</label>
-        <input className="w-full border p-2 rounded bg-gray-100" value={user.name} readOnly />
-      </div>
-      <div className="mt-3">
-        <label className="block text-sm">B field</label>
-        <input className="w-full border p-2 rounded" value={fieldB} onChange={e => setFieldB(e.target.value)} />
-      </div>
-      <div className="mt-3">
-        <label className="block text-sm">Signature</label>
-        <SignaturePad
-          onChange={setSignature}
-          initialData={signature && !signature.startsWith('data:') ? `/signatures/${signature}` : signature}
-        />
-      </div>
-      <div className="mt-3 flex justify-between">
-        <button onClick={onBack} className="px-4 py-2 bg-gray-200 rounded">Back</button>
-        <button onClick={() => onSave({ fieldB }, signature)} className="px-4 py-2 bg-blue-600 text-white rounded">Next</button>
-      </div>
-    </div>
-  );
-}
-
-function FormStep3({ user, draft, onSave, onBack }) {
-  const [notes, setNotes] = useState(draft?.notes || '');
-  const [signature, setSignature] = useState(draft?.signature || '');
-
-  useEffect(() => {
-    setNotes(draft?.notes || '');
-    setSignature(draft?.signature || '');
-  }, [draft]);
-  return (
-    <div>
-      <h2 className="text-lg font-semibold">Final Review</h2>
-      <p className="text-sm text-gray-600">Review and submit.</p>
-      <div className="mt-3">
-        <label className="block text-sm">Full name</label>
-        <input className="w-full border p-2 rounded bg-gray-100" value={user.name} readOnly />
-      </div>
-      <div className="mt-3">
-        <label className="block text-sm">Notes</label>
-        <textarea className="w-full border p-2 rounded" value={notes} onChange={e => setNotes(e.target.value)} />
-      </div>
-      <div className="mt-3">
-        <label className="block text-sm">Signature</label>
-        <SignaturePad
-          onChange={setSignature}
-          initialData={signature && !signature.startsWith('data:') ? `/signatures/${signature}` : signature}
-        />
-      </div>
-      <div className="mt-3 flex justify-between">
-        <button onClick={onBack} className="px-4 py-2 bg-gray-200 rounded">Back</button>
-        <button onClick={() => onSave({ notes }, signature)} className="px-4 py-2 bg-green-600 text-white rounded">Submit</button>
       </div>
     </div>
   );

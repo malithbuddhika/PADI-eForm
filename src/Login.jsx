@@ -2,6 +2,7 @@
 
 
 import { useState } from 'react';
+import { API_BASE } from './api'
 
 export default function Registration({ onSuccess }) {
   const [name, setName] = useState('');
@@ -42,7 +43,7 @@ export default function Registration({ onSuccess }) {
     setLoading(true);
     
     try {
-      const res = await fetch('http://localhost:4000/api/users', {
+  const res = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
