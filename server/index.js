@@ -100,21 +100,42 @@ app.post('/api/form/:step', (req, res) => {
   if (!userId || !data) return res.status(400).json({ error: 'Missing fields' });
   const table = step === '1' ? 'form1_data' : step === '2' ? 'form2_data' : 'form3_data';
   if (!table) return res.status(400).json({ error: 'Invalid step' });
-
-  if (signature) {
-    const matches = signature.match(/^data:image\/(png|jpeg);base64,(.+)$/);
-    if (!matches) return res.status(400).json({ error: 'Invalid signature format' });
+  // Support multiple signatures in data object: participant_signature, guardian_signature
+  const saveSignatureField = (dataUrl, suffix, cb) => {
+    if (!dataUrl) return cb(null, null);
+    const matches = dataUrl.match(/^data:image\/(png|jpeg);base64,(.+)$/);
+    if (!matches) return cb(new Error('Invalid signature format'));
     const ext = matches[1] === 'png' ? 'png' : 'jpg';
     const buffer = Buffer.from(matches[2], 'base64');
-    const filename = `${Date.now()}_${userId}_form${step}.${ext}`;
+    const filename = `${Date.now()}_${userId}_form${step}_${suffix}.${ext}`;
     const filePath = path.join(sigDir, filename);
-    fs.writeFile(filePath, buffer, (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      saveFormData(table, userId, data, filename, res);
+    fs.writeFile(filePath, buffer, (err) => cb(err, filename));
+  };
+
+  // If data contains participant_signature or guardian_signature, save them and replace with filenames
+  const participantSig = data.participant_signature || null;
+  const guardianSig = data.guardian_signature || null;
+
+  saveSignatureField(participantSig, 'participant', (errP, pFilename) => {
+    if (errP) return res.status(400).json({ error: errP.message });
+    saveSignatureField(guardianSig, 'guardian', (errG, gFilename) => {
+      if (errG) return res.status(400).json({ error: errG.message });
+      // replace signature data with saved filenames (if any)
+      const storedData = { ...data };
+      if (pFilename) {
+        storedData.participant_signature = pFilename;
+      } else {
+        delete storedData.participant_signature;
+      }
+      if (gFilename) {
+        storedData.guardian_signature = gFilename;
+      } else {
+        delete storedData.guardian_signature;
+      }
+      // include signature dates if present in data (they will be stored inside JSON data column)
+      saveFormData(table, userId, storedData, null, res);
     });
-  } else {
-    saveFormData(table, userId, data, null, res);
-  }
+  });
 });
 
 // Endpoint to get completion status for user
@@ -163,35 +184,50 @@ app.get('/api/template/:name', (req, res) => {
 app.post('/api/draft', (req, res) => {
   const { userId, form_step, data, signature } = req.body;
   if (!userId || !form_step || !data) return res.status(400).json({ error: 'Missing' });
-  // handle signature save
-  const saveSignature = (cb) => {
-    if (!signature) return cb(null, null);
-    const matches = signature.match(/^data:image\/(png|jpeg);base64,(.+)$/);
+  // handle participant and guardian signatures inside data object
+  const saveSignatureField = (dataUrl, suffix, cb) => {
+    if (!dataUrl) return cb(null, null);
+    const matches = dataUrl.match(/^data:image\/(png|jpeg);base64,(.+)$/);
     if (!matches) return cb(new Error('Invalid signature'));
     const ext = matches[1] === 'png' ? 'png' : 'jpg';
     const buffer = Buffer.from(matches[2], 'base64');
-    const filename = `${Date.now()}_${userId}_draft${form_step}.${ext}`;
+    const filename = `${Date.now()}_${userId}_draft${form_step}_${suffix}.${ext}`;
     const filePath = path.join(sigDir, filename);
     fs.writeFile(filePath, buffer, (err) => cb(err, filename));
   };
-  saveSignature((err, filename) => {
-    if (err) return res.status(400).json({ error: err.message });
-    // upsert draft
-    db.query('SELECT id FROM drafts WHERE user_id = ? AND form_step = ?', [userId, form_step], (e, rows) => {
-      if (e) return res.status(500).json({ error: e.message });
-      if (rows.length) {
-        const sql = 'UPDATE drafts SET data = ?, signature_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
-        db.query(sql, [JSON.stringify(data), filename || null, rows[0].id], (err2) => {
-          if (err2) return res.status(500).json({ error: err2.message });
-          res.json({ updated: true });
-        });
-      } else {
-        const sql = 'INSERT INTO drafts (user_id, form_step, data, signature_path) VALUES (?, ?, ?, ?)';
-        db.query(sql, [userId, form_step, JSON.stringify(data), filename || null], (err3) => {
-          if (err3) return res.status(500).json({ error: err3.message });
-          res.json({ created: true });
-        });
-      }
+
+  const participantSig = data.participant_signature || null;
+  const guardianSig = data.guardian_signature || null;
+
+  saveSignatureField(participantSig, 'participant', (errP, pFilename) => {
+    if (errP) return res.status(400).json({ error: errP.message });
+    saveSignatureField(guardianSig, 'guardian', (errG, gFilename) => {
+      if (errG) return res.status(400).json({ error: errG.message });
+
+      const storedData = { ...data };
+      if (pFilename) storedData.participant_signature = pFilename; else delete storedData.participant_signature;
+      if (gFilename) storedData.guardian_signature = gFilename; else delete storedData.guardian_signature;
+
+      // upsert draft
+      db.query('SELECT id FROM drafts WHERE user_id = ? AND form_step = ?', [userId, form_step], (e, rows) => {
+        if (e) return res.status(500).json({ error: e.message });
+        if (rows.length) {
+          const sql = 'UPDATE drafts SET data = ?, signature_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+          // signature_path column kept for backward compatibility - store participant filename if present
+          const sigPath = pFilename || gFilename || null;
+          db.query(sql, [JSON.stringify(storedData), sigPath, rows[0].id], (err2) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            res.json({ updated: true });
+          });
+        } else {
+          const sql = 'INSERT INTO drafts (user_id, form_step, data, signature_path) VALUES (?, ?, ?, ?)';
+          const sigPath = pFilename || gFilename || null;
+          db.query(sql, [userId, form_step, JSON.stringify(storedData), sigPath], (err3) => {
+            if (err3) return res.status(500).json({ error: err3.message });
+            res.json({ created: true });
+          });
+        }
+      });
     });
   });
 });
