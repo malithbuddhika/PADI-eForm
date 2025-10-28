@@ -77,6 +77,17 @@ CREATE TABLE IF NOT EXISTS drafts (
   FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
 );
 
+-- Complete submissions table: stores all 3 forms together
+CREATE TABLE IF NOT EXISTS complete_submissions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  form1_data JSON,
+  form2_data JSON,
+  form3_data JSON,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
+);
+
 -- Staff table with role differentiation
 CREATE TABLE IF NOT EXISTS staff (
     id INT PRIMARY KEY AUTO_INCREMENT,

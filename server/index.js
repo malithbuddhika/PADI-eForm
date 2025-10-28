@@ -4,7 +4,9 @@ import cors from 'cors';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Increase body size limit to handle base64 signature images (default is 100kb)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const db = mysql.createConnection({
   host: 'localhost',
@@ -122,6 +124,21 @@ const saveFormData = (table, userId, data, signatureFilename, res) => {
   });
 };
 
+// Helper to save form data without response (for background saving)
+const saveFormDataAsync = (table, userId, data, signatureFilename) => {
+  return new Promise((resolve, reject) => {
+    const sql = `INSERT INTO ${table} (user_id, data, signature_path) VALUES (?, ?, ?)`;
+    db.query(sql, [userId, JSON.stringify(data), signatureFilename || null], (err, result) => {
+      if (err) {
+        console.error(`Error saving to ${table}:`, err);
+        reject(err);
+      } else {
+        resolve(result.insertId);
+      }
+    });
+  });
+};
+
 app.post('/api/form/:step', (req, res) => {
   const step = req.params.step; // expected '1','2','3'
   const { userId, data, signature } = req.body;
@@ -169,14 +186,23 @@ app.post('/api/form/:step', (req, res) => {
 // Endpoint to get completion status for user
 app.get('/api/form-status/:userId', (req, res) => {
   const userId = req.params.userId;
-  const queries = [
-    'SELECT COUNT(*) AS c FROM form1_data WHERE user_id = ?',
-    'SELECT COUNT(*) AS c FROM form2_data WHERE user_id = ?',
-    'SELECT COUNT(*) AS c FROM form3_data WHERE user_id = ?',
-  ];
-  db.query(queries.join(';'), [userId, userId, userId], (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
-    // mysql2 returns results differently for multiple statements; run sequentially instead
+  
+  // First check if there's a complete submission
+  db.query('SELECT COUNT(*) AS c FROM complete_submissions WHERE user_id = ?', [userId], (errComplete, completeRows) => {
+    if (errComplete) return res.status(500).json({ error: errComplete.message });
+    
+    // If complete submission exists, all forms are done
+    if (completeRows[0].c > 0) {
+      return res.json({ form1: true, form2: true, form3: true });
+    }
+    
+    // Otherwise check individual form tables
+    const queries = [
+      'SELECT COUNT(*) AS c FROM form1_data WHERE user_id = ?',
+      'SELECT COUNT(*) AS c FROM form2_data WHERE user_id = ?',
+      'SELECT COUNT(*) AS c FROM form3_data WHERE user_id = ?',
+    ];
+    
     db.query(queries[0], [userId], (e1, r1) => {
       if (e1) return res.status(500).json({ error: e1.message });
       db.query(queries[1], [userId], (e2, r2) => {
@@ -312,6 +338,115 @@ app.get('/api/history/:userId', (req, res) => {
         res.json(all.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
       });
     });
+  });
+});
+
+// Complete submission - saves all 3 forms together
+app.post('/api/submit-complete', (req, res) => {
+  console.log('Received complete submission request');
+  const { userId, form1Data, form2Data, form3Data } = req.body;
+  
+  console.log('Request body:', { userId, hasForm1: !!form1Data, hasForm2: !!form2Data, hasForm3: !!form3Data });
+  
+  if (!userId || !form1Data || !form2Data || !form3Data) {
+    console.error('Missing required data:', { userId, hasForm1: !!form1Data, hasForm2: !!form2Data, hasForm3: !!form3Data });
+    return res.status(400).json({ error: 'All form data is required' });
+  }
+
+  // Helper to save signature files
+  const saveSignatureField = (dataUrl, suffix, cb) => {
+    if (!dataUrl || !dataUrl.startsWith('data:image')) return cb(null, null);
+    const matches = dataUrl.match(/^data:image\/(png|jpeg);base64,(.+)$/);
+    if (!matches) return cb(new Error('Invalid signature format'));
+    const ext = matches[1] === 'png' ? 'png' : 'jpg';
+    const buffer = Buffer.from(matches[2], 'base64');
+    const filename = `${Date.now()}_${userId}_${suffix}.${ext}`;
+    const filePath = path.join(sigDir, filename);
+    fs.writeFile(filePath, buffer, (err) => cb(err, filename));
+  };
+
+  // Process all signatures from all forms
+  const signatures = {
+    form1_participant: form1Data.participant_signature,
+    form1_guardian: form1Data.guardian_signature,
+    form2_participant: form2Data.participant_signature,
+    form2_guardian: form2Data.guardian_signature,
+    form3_participant: form3Data.participant_signature,
+    form3_guardian: form3Data.guardian_signature
+  };
+
+  const processedData = {
+    form1: { ...form1Data },
+    form2: { ...form2Data },
+    form3: { ...form3Data }
+  };
+
+  // Save all signatures
+  let processed = 0;
+  const total = Object.keys(signatures).length;
+  const errors = [];
+
+  Object.entries(signatures).forEach(([key, dataUrl]) => {
+    saveSignatureField(dataUrl, key, (err, filename) => {
+      processed++;
+      if (err) {
+        console.error(`Error saving ${key}:`, err);
+        errors.push(err.message);
+      } else if (filename) {
+        // Update the data with filename
+        const [form, sigType] = key.split('_');
+        processedData[form][`${sigType}_signature`] = filename;
+      }
+
+      if (processed === total) {
+        if (errors.length > 0) {
+          return res.status(400).json({ error: 'Signature save errors: ' + errors.join(', ') });
+        }
+
+        // Save to database
+        const sql = `INSERT INTO complete_submissions (user_id, form1_data, form2_data, form3_data) VALUES (?, ?, ?, ?)`;
+        db.query(sql, [
+          userId,
+          JSON.stringify(processedData.form1),
+          JSON.stringify(processedData.form2),
+          JSON.stringify(processedData.form3)
+        ], (err, result) => {
+          if (err) {
+            console.error('Database error:', err);
+            return res.status(500).json({ error: err.message });
+          }
+
+          // Also save to individual form tables for backward compatibility
+          Promise.all([
+            saveFormDataAsync('form1_data', userId, processedData.form1, null),
+            saveFormDataAsync('form2_data', userId, processedData.form2, null),
+            saveFormDataAsync('form3_data', userId, processedData.form3, null)
+          ]).catch(err => console.error('Error saving to individual tables:', err));
+
+          res.json({ 
+            success: true, 
+            submissionId: result.insertId,
+            message: 'All forms submitted successfully' 
+          });
+        });
+      }
+    });
+  });
+});
+
+// Get complete submissions for a user
+app.get('/api/complete-submissions/:userId', (req, res) => {
+  const { userId } = req.params;
+  const sql = 'SELECT * FROM complete_submissions WHERE user_id = ? ORDER BY created_at DESC';
+  db.query(sql, [userId], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const submissions = rows.map(row => ({
+      ...row,
+      form1_data: JSON.parse(row.form1_data),
+      form2_data: JSON.parse(row.form2_data),
+      form3_data: JSON.parse(row.form3_data)
+    }));
+    res.json(submissions);
   });
 });
 

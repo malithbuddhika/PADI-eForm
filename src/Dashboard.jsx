@@ -113,7 +113,13 @@ export default function Dashboard({ userId }) {
 
   // Final submit for a step (marks completed)
   const submitStep = async (step, data, signature) => {
-  const res = await fetch(`${API_BASE}/api/form/${step}`, {
+    // If this is step 3, submit all forms together
+    if (step === 3) {
+      return submitComplete(data);
+    }
+    
+    // For steps 1 and 2, just save as draft and move forward
+    const res = await fetch(`${API_BASE}/api/form/${step}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, data, signature }),
@@ -127,6 +133,58 @@ export default function Dashboard({ userId }) {
     }
     alert('Submit failed');
     return false;
+  };
+
+  // Submit all forms together when completing step 3
+  const submitComplete = async (form3Data) => {
+    try {
+      // Get the latest draft data for forms 1 and 2
+      const form1Data = drafts[1] || {};
+      const form2Data = drafts[2] || {};
+
+      // Validate that we have data for all forms
+      if (!form1Data.participant_signature || !form2Data.participant_signature) {
+        alert('Please complete Forms 1 and 2 before submitting.');
+        return false;
+      }
+
+      console.log('Submitting complete form data:', { form1Data, form2Data, form3Data });
+
+      const res = await fetch(`${API_BASE}/api/submit-complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          form1Data,
+          form2Data,
+          form3Data
+        }),
+      });
+
+      // Check if response is JSON
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('Non-JSON response:', text);
+        throw new Error('Server returned non-JSON response. Check server logs.');
+      }
+
+      const result = await res.json();
+      
+      if (res.ok && result.success) {
+        // Mark all forms as completed
+        setCompleted([1, 2, 3]);
+        alert('All forms submitted successfully!');
+        return true;
+      } else {
+        alert('Submit failed: ' + (result.error || 'Unknown error'));
+        return false;
+      }
+    } catch (error) {
+      console.error('Submission error:', error);
+      alert('Submit failed: ' + error.message);
+      return false;
+    }
   };
 
   const back = () => setCurrent((c) => Math.max(1, c - 1));
