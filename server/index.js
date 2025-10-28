@@ -52,7 +52,29 @@ app.get('/api/users/:id', (req, res) => {
   db.query(sql, [id], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    res.json(rows[0]);
+    
+    const user = rows[0];
+    
+    // Fetch instructors from the dive center if dive_center_id exists
+    if (user.dive_center_id) {
+      const instructorSql = `
+        SELECT id, name, role, certification_level
+        FROM staff
+        WHERE dive_center_id = ? AND role = 'instructor' AND is_active = TRUE
+      `;
+      db.query(instructorSql, [user.dive_center_id], (err2, instructors) => {
+        if (err2) {
+          console.error('Error fetching instructors:', err2);
+          user.instructors = [];
+        } else {
+          user.instructors = instructors;
+        }
+        res.json(user);
+      });
+    } else {
+      user.instructors = [];
+      res.json(user);
+    }
   });
 });
 

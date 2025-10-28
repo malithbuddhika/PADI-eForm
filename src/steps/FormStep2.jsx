@@ -137,7 +137,7 @@ export default function FormStep2({ user, draft, onDraft, onBack }) {
   };
   return (
     <div className="max-w-4xl mx-auto bg-white">
-      {/* PADI Logo Header */}
+
       <div className="flex items-start mb-4">
         <img src={padiLogo} alt="PADI" className="w-20 h-20 mr-4" />
         <div className="flex-1">
@@ -148,10 +148,10 @@ export default function FormStep2({ user, draft, onDraft, onBack }) {
       </div>
 
       <div className="px-3 text-xs leading-relaxed">
-        {/* Non-Agency Section */}
+
         <div className="mb-4">
           <p className="text-justify">
-            I understand and agree that PADI Members ("Members"), including <span className="inline-block border-b border-gray-400 min-w-[200px] align-bottom mx-1"></span> 
+            I understand and agree that PADI Members ("Members"), including <span className="inline-block border-b border-gray-400 align-bottom mx-1 font-bold text-base" style={{ minWidth: `${Math.max((user?.dive_center_name || '').length * 10, 100)}px` }}>{user?.dive_center_name ||''}</span> 
             and/or any individual PADI Instructors and Divemasters associated with the program in which I am participat-
             ing, are licensed to use various PADI Trademarks and to conduct PADI training, but are not agents, employees or franchisees of PADI 
             Americas, Inc, or its parent, subsidiary and affiliated corporations ("PADI"). I further understand that Member business activities 
@@ -159,21 +159,20 @@ export default function FormStep2({ user, draft, onDraft, onBack }) {
             ing programs, it is not responsible for, nor does it have the right to control, the operation of the Members' business activities and 
             the day-to day conduct of PADI programs and supervision of divers by the Members or their associated staff. I further understand 
             and agree on behalf of myself, my heirs and my estate that in the event of an injury or death during this activity, neither I nor my es-
-            tate shall seek to hold PADI liable for the actions, inactions or negligence of <span className="inline-block border-b border-gray-400 min-w-[200px] align-bottom mx-1"></span>
+            tate shall seek to hold PADI liable for the actions, inactions or negligence of <span className="inline-block border-b border-gray-400 align-bottom mx-1 font-bold text-base" style={{ minWidth: `${Math.max((user?.dive_center_name || '').length * 10, 100)}px` }}>{user?.dive_center_name || ''}</span>
             and/or the instructors and divemasters associated with the activity.
           </p>
         </div>
 
-        {/* Liability Release Header */}
+        /* Liability Release Header */
         <div className="mb-3">
           <h2 className="text-base font-bold mb-1 bg-black text-white px-3 py-2 -mx-3">Liability Release and Assumption of Risk Agreement</h2>
           <p className="text-xs text-red-600 mt-1">In European Union and European Free Trade Association countries use alternative form.</p>
           <p className="text-xs font-bold mt-1">Please read carefully and fill in all blanks before signing.</p>
         </div>
 
-        {/* Rest of the liability release content */}
         <p>
-          I, <span className="inline-block border-b border-gray-400 min-w-[200px] align-bottom mx-1"></span>, hereby 
+          I, <span className="inline-block border-b border-gray-400 align-bottom mx-1 font-bold text-base" style={{ minWidth: `${Math.max((user?.name || '').length * 10, 100)}px` }}>{user?.name || ''}</span>, hereby 
           affirm that I am aware that skin and scuba diving have inherent risks 
           which may result in serious injury or death.
         </p>
@@ -192,9 +191,13 @@ export default function FormStep2({ user, draft, onDraft, onBack }) {
 
         <p>
           I understand and agree that neither my instructor(s),
-          <span className="inline-block border-b border-gray-400 min-w-[250px] align-bottom mx-1"></span>,
+          <span className="inline-block border-b border-gray-400 align-bottom mx-1 font-bold text-base" style={{ minWidth: `${Math.max((user?.instructors?.map(i => i.name).join(', ') || '').length * 10, 100)}px` }}>
+            {user?.instructors?.map(i => i.name).join(', ') || ''}
+          </span>,
           the facility through which I receive my instruction, 
-          <span className="inline-block border-b border-gray-400 min-w-[250px] align-bottom mx-1"></span>,
+          <span className="inline-block border-b border-gray-400 align-bottom mx-1 font-bold text-base" style={{ minWidth: `${Math.max((user?.dive_center_name || '').length * 10, 100)}px` }}>
+            {user?.dive_center_name || ''}
+          </span>,
           nor PADI Americas, Inc., nor its affiliate and subsidiary corporations, 
           nor any of their respective employees, officers, agents, contractors 
           or assigns (hereinafter referred to as "Released Parties") may be 
@@ -253,25 +256,24 @@ export default function FormStep2({ user, draft, onDraft, onBack }) {
           because of my representations to the Released Parties.
         </p>
 
-        {/* Final Declaration Section */}
-        <p className="font-bold mt-4">
-          I, <span className="inline-block border-b border-gray-400 min-w-[250px] align-bottom mx-1"></span>,
-          BY THIS INSTRUMENT AGREE TO EXEMPT AND RELEASE MY 
-          INSTRUCTORS, <span className="inline-block border-b border-gray-400 min-w-[200px] align-bottom mx-1"></span>, 
-          THE FACILITY THROUGH WHICH I RECEIVE MY INSTRUCTION, 
-          <span className="inline-block border-b border-gray-400 min-w-[200px] align-bottom mx-1"></span>, AND 
-          PADI AMERICAS, INC., AND ALL RELATED ENTITIES AS DEFINED 
-          ABOVE, FROM ALL LIABILITY OR RESPONSIBILITY WHATSOEVER 
-          FOR PERSONAL INJURY, PROPERTY DAMAGE OR WRONGFUL DEATH 
-          HOWEVER CAUSED, INCLUDING, BUT NOT LIMITED TO, THE NEGLI-
-          GENCE OF THE RELEASED PARTIES, WHETHER PASSIVE OR ACTIVE.
-        </p>
+          <p className="font-bold mt-4">
+            I, <span className="inline-block border-b border-gray-400 align-bottom mx-1 font-bold text-base" style={{ minWidth: `${Math.max((user?.name || '').length * 10, 100)}px` }}>{user?.name || ''}</span>,
+            BY THIS INSTRUMENT AGREE TO EXEMPT AND RELEASE MY 
+            INSTRUCTORS, <span className="inline-block border-b border-gray-400 align-bottom mx-1 font-bold text-base" style={{ minWidth: `${Math.max((user?.instructors?.map(i => i.name).join(', ') || '').length * 10, 100)}px` }}>{user?.instructors?.map(i => i.name).join(', ') || ''}</span>, 
+            THE FACILITY THROUGH WHICH I RECEIVE MY INSTRUCTION, 
+            <span className="inline-block border-b border-gray-400 align-bottom mx-1 font-bold text-base" style={{ minWidth: `${Math.max((user?.dive_center_name || '').length * 10, 100)}px` }}>{user?.dive_center_name || ''}</span>, AND 
+            PADI AMERICAS, INC., AND ALL RELATED ENTITIES AS DEFINED 
+            ABOVE, FROM ALL LIABILITY OR RESPONSIBILITY WHATSOEVER 
+            FOR PERSONAL INJURY, PROPERTY DAMAGE OR WRONGFUL DEATH 
+            HOWEVER CAUSED, INCLUDING, BUT NOT LIMITED TO, THE NEGLI-
+            GENCE OF THE RELEASED PARTIES, WHETHER PASSIVE OR ACTIVE.
+          </p>
 
-        <p className="font-bold text-xs uppercase mt-4">
-          I HAVE FULLY INFORMED MYSELF AND MY HEIRS OF THE CONTENTS OF THIS NON-AGENCY DISCLOSURE AND ACKNOWLEDGMENT AGREEMENT AND LIABILITY RELEASE AND ASSUMPTION OF RISK AGREEMENT BY READING BOTH BEFORE SIGNING BELOW ON BEHALF OF MYSELF AND MY HEIRS.
-        </p>
+          <p className="font-bold text-xs uppercase mt-4">
+            I HAVE FULLY INFORMED MYSELF AND MY HEIRS OF THE CONTENTS OF THIS NON-AGENCY DISCLOSURE AND ACKNOWLEDGMENT AGREEMENT AND LIABILITY RELEASE AND ASSUMPTION OF RISK AGREEMENT BY READING BOTH BEFORE SIGNING BELOW ON BEHALF OF MYSELF AND MY HEIRS.
+          </p>
 
-        {/* Signature area previews */}
+          {/* Signature area previews */}
         <div className="space-y-6 mt-8">
           <div>
             <label className="block font-semibold mb-2 text-sm">Participant's Signature</label>
