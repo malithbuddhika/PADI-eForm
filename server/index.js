@@ -1,6 +1,14 @@
 import express from 'express';
 import mysql from 'mysql2';
 import cors from 'cors';
+import nodemailer from 'nodemailer';
+import PDFDocument from 'pdfkit';
+import fs from 'fs';
+import path from 'path';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 app.use(cors());
@@ -80,13 +88,236 @@ app.get('/api/users/:id', (req, res) => {
   });
 });
 
-import fs from 'fs';
-import path from 'path';
+// Email configuration
+const EMAIL_MODE = process.env.EMAIL_MODE || 'production'; // 'test' or 'production'
+
+// For localhost testing, use a test transport that logs emails
+const transporter = EMAIL_MODE === 'test' 
+  ? nodemailer.createTransport({
+      streamTransport: true,
+      newline: 'unix',
+      buffer: true
+    })
+  : nodemailer.createTransport({
+      service: 'gmail', // or 'smtp.office365.com', 'smtp.mail.yahoo.com', etc.
+      auth: {
+        user: process.env.EMAIL_USER || 'your-email@gmail.com',
+        pass: process.env.EMAIL_PASSWORD || 'your-app-password'
+      }
+    });
 
 const sigDir = path.join(process.cwd(), 'server', 'signatures');
 if (!fs.existsSync(sigDir)) fs.mkdirSync(sigDir, { recursive: true });
 const previewDir = path.join(process.cwd(), 'server', 'previews');
 if (!fs.existsSync(previewDir)) fs.mkdirSync(previewDir, { recursive: true });
+
+// Function to generate PDF with all three forms
+const generateCompletePDF = async (userId, userName, form1Data, form2Data, form3Data) => {
+  return new Promise((resolve, reject) => {
+    const filename = `complete_forms_${userId}_${Date.now()}.pdf`;
+    const filePath = path.join(previewDir, filename);
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+    const stream = fs.createWriteStream(filePath);
+    
+    doc.pipe(stream);
+
+    // Helper to add signature image
+    const addSignature = (doc, signaturePath, label, yPosition) => {
+      if (signaturePath) {
+        const fullPath = signaturePath.startsWith('data:') 
+          ? null 
+          : path.join(sigDir, signaturePath);
+        
+        if (fullPath && fs.existsSync(fullPath)) {
+          doc.fontSize(10).text(label, 50, yPosition);
+          try {
+            doc.image(fullPath, 50, yPosition + 15, { width: 200, height: 60 });
+          } catch (e) {
+            doc.text('(Signature image error)', 50, yPosition + 15);
+          }
+        } else {
+          doc.fontSize(10).text(`${label}: (No signature)`, 50, yPosition);
+        }
+      }
+    };
+
+    // FORM 1 - Standard Safe Diving Practices
+    doc.fontSize(18).text('PADI e-Forms - Complete Submission', { align: 'center' });
+    doc.fontSize(12).text(`Participant: ${userName}`, { align: 'center' });
+    doc.moveDown(2);
+    
+    doc.fontSize(16).text('Form 1: Standard Safe Diving Practices Statement', { underline: true });
+    doc.moveDown();
+    doc.fontSize(10).text('This form confirms understanding of safe diving practices.');
+    doc.moveDown();
+    
+    if (form1Data.birthdate) {
+      doc.text(`Birthdate: ${form1Data.birthdate}`);
+      doc.moveDown(0.5);
+    }
+    
+    let currentY = doc.y;
+    addSignature(doc, form1Data.participant_signature, 'Participant Signature', currentY);
+    currentY = doc.y + 80;
+    
+    if (form1Data.participant_signature_date) {
+      doc.fontSize(10).text(`Date: ${form1Data.participant_signature_date}`, 50, currentY);
+      currentY += 20;
+    }
+    
+    if (form1Data.guardian_signature) {
+      addSignature(doc, form1Data.guardian_signature, 'Guardian Signature', currentY);
+      currentY = doc.y + 80;
+      if (form1Data.guardian_signature_date) {
+        doc.fontSize(10).text(`Date: ${form1Data.guardian_signature_date}`, 50, currentY);
+      }
+    }
+
+    // PAGE 2 - FORM 2
+    doc.addPage();
+    doc.fontSize(16).text('Form 2: Non-Agency Disclosure and Liability Release', { underline: true });
+    doc.moveDown();
+    
+    if (form2Data.dive_center_name || form2Data.instructor_names) {
+      doc.fontSize(10);
+      if (form2Data.dive_center_name) {
+        doc.text(`Dive Center: ${form2Data.dive_center_name}`);
+      }
+      if (form2Data.instructor_names) {
+        doc.text(`Instructors: ${form2Data.instructor_names}`);
+      }
+      doc.moveDown();
+    }
+    
+    currentY = doc.y;
+    addSignature(doc, form2Data.participant_signature, 'Participant Signature', currentY);
+    currentY = doc.y + 80;
+    
+    if (form2Data.participant_signature_date) {
+      doc.fontSize(10).text(`Date: ${form2Data.participant_signature_date}`, 50, currentY);
+      currentY += 20;
+    }
+    
+    if (form2Data.guardian_signature) {
+      addSignature(doc, form2Data.guardian_signature, 'Guardian Signature', currentY);
+      currentY = doc.y + 80;
+      if (form2Data.guardian_signature_date) {
+        doc.fontSize(10).text(`Date: ${form2Data.guardian_signature_date}`, 50, currentY);
+      }
+    }
+
+    // PAGE 3 - FORM 3
+    doc.addPage();
+    doc.fontSize(16).text('Form 3: Diver Medical Participant Questionnaire', { underline: true });
+    doc.moveDown();
+    doc.fontSize(10).text('Medical questionnaire responses and signatures.');
+    doc.moveDown();
+    
+    if (form3Data.formData) {
+      doc.fontSize(10).text('Main Questions:');
+      for (let i = 1; i <= 10; i++) {
+        const answer = form3Data.formData[`q${i}`];
+        if (answer) {
+          doc.text(`Q${i}: ${answer.toUpperCase()}`);
+        }
+      }
+      doc.moveDown();
+      
+      // Show box answers if any "yes" responses
+      const boxes = ['boxA', 'boxB', 'boxC', 'boxD', 'boxE', 'boxF', 'boxG'];
+      boxes.forEach(box => {
+        const boxData = form3Data.formData[box];
+        if (boxData && Object.values(boxData).some(v => v === 'yes')) {
+          doc.text(`${box.toUpperCase()} responses included`);
+        }
+      });
+      doc.moveDown();
+    }
+    
+    currentY = doc.y;
+    addSignature(doc, form3Data.participant_signature, 'Participant Signature', currentY);
+    currentY = doc.y + 80;
+    
+    if (form3Data.participant_signature_date) {
+      doc.fontSize(10).text(`Date: ${form3Data.participant_signature_date}`, 50, currentY);
+      currentY += 20;
+    }
+    
+    if (form3Data.guardian_signature) {
+      addSignature(doc, form3Data.guardian_signature, 'Guardian Signature', currentY);
+      currentY = doc.y + 80;
+      if (form3Data.guardian_signature_date) {
+        doc.fontSize(10).text(`Date: ${form3Data.guardian_signature_date}`, 50, currentY);
+      }
+    }
+
+    doc.end();
+    
+    stream.on('finish', () => {
+      resolve(filePath);
+    });
+    
+    stream.on('error', (err) => {
+      reject(err);
+    });
+  });
+};
+
+// Function to send email with PDF attachment
+const sendCompletionEmail = async (userEmail, userName, diveCenterEmail, pdfPath) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER || 'noreply@padi-eforms.com',
+    to: diveCenterEmail,
+    cc: userEmail,
+    subject: `PADI e-Forms Submission - ${userName}`,
+    html: `
+      <h2>PADI e-Forms Complete Submission</h2>
+      <p>Dear Dive Center,</p>
+      <p>A participant has completed all required PADI forms.</p>
+      <p><strong>Participant:</strong> ${userName}</p>
+      <p><strong>Email:</strong> ${userEmail}</p>
+      <p>Please find the complete forms attached as a PDF document.</p>
+      <br>
+      <p>Best regards,<br>PADI e-Forms System</p>
+    `,
+    attachments: [
+      {
+        filename: `PADI_Forms_${userName.replace(/\s+/g, '_')}.pdf`,
+        path: pdfPath
+      }
+    ]
+  };
+
+  try {
+    if (EMAIL_MODE === 'test') {
+      // In test mode, log the email details instead of sending
+      console.log('\n' + '='.repeat(60));
+      console.log('📧 EMAIL (TEST MODE - Not Actually Sent)');
+      console.log('='.repeat(60));
+      console.log('From:', mailOptions.from);
+      console.log('To:', mailOptions.to);
+      console.log('CC:', mailOptions.cc);
+      console.log('Subject:', mailOptions.subject);
+      console.log('Attachment:', mailOptions.attachments[0].filename);
+      console.log('PDF Path:', pdfPath);
+      console.log('='.repeat(60) + '\n');
+      
+      return { 
+        success: true, 
+        messageId: 'test-mode-' + Date.now(),
+        testMode: true 
+      };
+    }
+    
+    // Production mode - actually send the email
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Email sent successfully:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Email send error:', error);
+    return { success: false, error: error.message };
+  }
+};
 
 // Serve signature images
 app.use('/signatures', express.static(sigDir));
@@ -145,9 +376,16 @@ app.post('/api/form/:step', (req, res) => {
   if (!userId || !data) return res.status(400).json({ error: 'Missing fields' });
   const table = step === '1' ? 'form1_data' : step === '2' ? 'form2_data' : 'form3_data';
   if (!table) return res.status(400).json({ error: 'Invalid step' });
+  
   // Support multiple signatures in data object: participant_signature, guardian_signature
   const saveSignatureField = (dataUrl, suffix, cb) => {
     if (!dataUrl) return cb(null, null);
+    
+    // If it's already a filename (not base64), just return it
+    if (!dataUrl.startsWith('data:image')) {
+      return cb(null, dataUrl);
+    }
+    
     const matches = dataUrl.match(/^data:image\/(png|jpeg);base64,(.+)$/);
     if (!matches) return cb(new Error('Invalid signature format'));
     const ext = matches[1] === 'png' ? 'png' : 'jpg';
@@ -238,9 +476,16 @@ app.get('/api/template/:name', (req, res) => {
 app.post('/api/draft', (req, res) => {
   const { userId, form_step, data, signature } = req.body;
   if (!userId || !form_step || !data) return res.status(400).json({ error: 'Missing' });
+  
   // handle participant and guardian signatures inside data object
   const saveSignatureField = (dataUrl, suffix, cb) => {
     if (!dataUrl) return cb(null, null);
+    
+    // If it's already a filename (not base64), just return it
+    if (!dataUrl.startsWith('data:image')) {
+      return cb(null, dataUrl);
+    }
+    
     const matches = dataUrl.match(/^data:image\/(png|jpeg);base64,(.+)$/);
     if (!matches) return cb(new Error('Invalid signature'));
     const ext = matches[1] === 'png' ? 'png' : 'jpg';
@@ -292,18 +537,19 @@ app.get('/api/draft/:userId/:step', (req, res) => {
   db.query('SELECT data, signature_path FROM drafts WHERE user_id = ? AND form_step = ? ORDER BY updated_at DESC LIMIT 1', [userId, step], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!rows.length) return res.json(null);
-    res.json({ data: JSON.parse(rows[0].data), signature: rows[0].signature_path });
+    // MySQL2 auto-parses JSON columns, so check if it's already an object
+    const data = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+    res.json({ data, signature: rows[0].signature_path });
   });
 });
 
 // Preview filled form as a simple PDF (generates a very basic PDF from JSON data)
-import PDFDocument from 'pdfkit';
 app.get('/api/preview/:userId/:step', (req, res) => {
   const { userId, step } = req.params;
   db.query('SELECT data FROM drafts WHERE user_id = ? AND form_step = ? ORDER BY updated_at DESC LIMIT 1', [userId, step], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!rows.length) return res.status(404).json({ error: 'No draft' });
-    const data = JSON.parse(rows[0].data);
+    const data = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
     const doc = new PDFDocument();
     const filename = `preview_${userId}_${step}_${Date.now()}.pdf`;
     const filePath = path.join(previewDir, filename);
@@ -334,7 +580,10 @@ app.get('/api/history/:userId', (req, res) => {
       if (e2) return res.status(500).json({ error: e2.message });
       db.query(q3, [userId], (e3, r3) => {
         if (e3) return res.status(500).json({ error: e3.message });
-        const all = [...r1, ...r2, ...r3].map(r => ({ ...r, data: JSON.parse(r.data) }));
+        const all = [...r1, ...r2, ...r3].map(r => ({ 
+          ...r, 
+          data: typeof r.data === 'string' ? JSON.parse(r.data) : r.data 
+        }));
         res.json(all.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
       });
     });
@@ -355,7 +604,13 @@ app.post('/api/submit-complete', (req, res) => {
 
   // Helper to save signature files
   const saveSignatureField = (dataUrl, suffix, cb) => {
-    if (!dataUrl || !dataUrl.startsWith('data:image')) return cb(null, null);
+    if (!dataUrl) return cb(null, null);
+    
+    // If it's already a filename (not base64), just return it
+    if (!dataUrl.startsWith('data:image')) {
+      return cb(null, dataUrl);
+    }
+    
     const matches = dataUrl.match(/^data:image\/(png|jpeg);base64,(.+)$/);
     if (!matches) return cb(new Error('Invalid signature format'));
     const ext = matches[1] === 'png' ? 'png' : 'jpg';
@@ -423,11 +678,77 @@ app.post('/api/submit-complete', (req, res) => {
             saveFormDataAsync('form3_data', userId, processedData.form3, null)
           ]).catch(err => console.error('Error saving to individual tables:', err));
 
-          res.json({ 
-            success: true, 
-            submissionId: result.insertId,
-            message: 'All forms submitted successfully' 
-          });
+          // Get user details for email
+          db.query('SELECT u.name, u.email, dc.email as dive_center_email FROM `user` u LEFT JOIN dive_centers dc ON u.dive_center_id = dc.id WHERE u.id = ?', 
+            [userId], 
+            async (errUser, userRows) => {
+              if (errUser || !userRows.length) {
+                console.error('Error fetching user for email:', errUser);
+                return res.json({ 
+                  success: true, 
+                  submissionId: result.insertId,
+                  message: 'Forms submitted but email not sent (user data not found)' 
+                });
+              }
+
+              const user = userRows[0];
+              const userName = user.name;
+              const userEmail = user.email;
+              const diveCenterEmail = user.dive_center_email || process.env.DEFAULT_DIVE_CENTER_EMAIL;
+
+              if (!diveCenterEmail) {
+                console.error('No dive center email found');
+                return res.json({ 
+                  success: true, 
+                  submissionId: result.insertId,
+                  message: 'Forms submitted but email not sent (no dive center email)' 
+                });
+              }
+
+              try {
+                // Generate PDF with all forms
+                const pdfPath = await generateCompletePDF(
+                  userId, 
+                  userName,
+                  processedData.form1,
+                  processedData.form2,
+                  processedData.form3
+                );
+
+                // Send email
+                const emailResult = await sendCompletionEmail(
+                  userEmail,
+                  userName,
+                  diveCenterEmail,
+                  pdfPath
+                );
+
+                if (emailResult.success) {
+                  res.json({ 
+                    success: true, 
+                    submissionId: result.insertId,
+                    message: 'All forms submitted and email sent successfully',
+                    emailSent: true
+                  });
+                } else {
+                  res.json({ 
+                    success: true, 
+                    submissionId: result.insertId,
+                    message: 'Forms submitted but email failed: ' + emailResult.error,
+                    emailSent: false
+                  });
+                }
+              } catch (pdfError) {
+                console.error('PDF generation error:', pdfError);
+                res.json({ 
+                  success: true, 
+                  submissionId: result.insertId,
+                  message: 'Forms submitted but PDF/email failed: ' + pdfError.message,
+                  emailSent: false
+                });
+              }
+            }
+          );
         });
       }
     });
@@ -442,9 +763,9 @@ app.get('/api/complete-submissions/:userId', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     const submissions = rows.map(row => ({
       ...row,
-      form1_data: JSON.parse(row.form1_data),
-      form2_data: JSON.parse(row.form2_data),
-      form3_data: JSON.parse(row.form3_data)
+      form1_data: typeof row.form1_data === 'string' ? JSON.parse(row.form1_data) : row.form1_data,
+      form2_data: typeof row.form2_data === 'string' ? JSON.parse(row.form2_data) : row.form2_data,
+      form3_data: typeof row.form3_data === 'string' ? JSON.parse(row.form3_data) : row.form3_data
     }));
     res.json(submissions);
   });
