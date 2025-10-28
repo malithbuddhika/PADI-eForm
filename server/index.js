@@ -33,8 +33,8 @@ app.post('/api/users', (req, res) => {
       // Existing user found - return its id
       return res.json({ id: rows[0].id, existing: true });
     }
-    const sql = 'INSERT INTO `user` (name, email, birthday, language) VALUES (?, ?, ?, ?)';
-    db.query(sql, [name, email, birthday, language], (err2, result) => {
+    const sql = 'INSERT INTO `user` (name, email, birthday, language, dive_center_id) VALUES (?, ?, ?, ?, ?)';
+    db.query(sql, [name, email, birthday, language, 1], (err2, result) => {
       if (err2) return res.status(500).json({ error: err2.message });
       res.json({ id: result.insertId, name, email, birthday, language, existing: false });
     });
@@ -43,7 +43,13 @@ app.post('/api/users', (req, res) => {
 
 app.get('/api/users/:id', (req, res) => {
   const id = req.params.id;
-  db.query('SELECT id, name, email, birthday, language FROM `user` WHERE id = ?', [id], (err, rows) => {
+  const sql = `
+    SELECT u.id, u.name, u.email, u.birthday, u.language, u.dive_center_id, dc.name as dive_center_name
+    FROM \`user\` u
+    LEFT JOIN dive_centers dc ON u.dive_center_id = dc.id
+    WHERE u.id = ?
+  `;
+  db.query(sql, [id], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     res.json(rows[0]);

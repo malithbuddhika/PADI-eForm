@@ -5,9 +5,9 @@ import FormStep3 from './steps/FormStep3.jsx';
 import { API_BASE } from './api'
 
 const steps = [
-  { id: 1, title: 'Form ', desc: '1' },
-  { id: 2, title: 'Form ', desc: '2' },
-  { id: 3, title: 'Form ', desc: '3' },
+  { id: 1, title: '', desc: '' },
+  { id: 2, title: '', desc: '' },
+  { id: 3, title: '', desc: '' },
 ];
 
 function Stepper({ current, completed, goTo }) {
@@ -16,12 +16,12 @@ function Stepper({ current, completed, goTo }) {
       {steps.map((s) => {
         const status = completed.includes(s.id) ? 'completed' : s.id === current ? 'current' : 'upcoming';
         // define clear class sets for each status so colors are distinct
-        const base = 'flex items-center gap-3 px-3 py-2 rounded-md transition-colors';
+        const base = 'flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer';
         const statusBtnClass = status === 'completed'
           ? `${base} bg-green-600 hover:bg-green-700 text-white`
           : status === 'current'
             ? `${base} bg-blue-600 hover:bg-blue-700 text-white shadow`
-            : `${base} bg-gray-100 text-gray-700 opacity-80 cursor-not-allowed`;
+            : `${base} bg-gray-300 hover:bg-gray-400 text-gray-700`;
 
         const badgeClass = status === 'completed'
           ? 'w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center text-xs'
@@ -33,8 +33,6 @@ function Stepper({ current, completed, goTo }) {
           <button
             key={s.id}
             onClick={() => goTo(s.id)}
-            disabled={status === 'upcoming'}
-            aria-disabled={status === 'upcoming'}
             className={statusBtnClass}
           >
             <span className={badgeClass}>{status === 'completed' ? '✓' : s.id}</span>
@@ -92,10 +90,10 @@ export default function Dashboard({ userId }) {
   }, [userId]);
 
   const goTo = (step) => {
-    // only allow if step <= (highest completed or 0) + 1
-    const highestCompleted = completed.length ? Math.max(...completed) : 0;
-    const max = highestCompleted + 1;
-    if (step <= max) setCurrent(step);
+    // Allow navigation to any step (1, 2, or 3)
+    if (step >= 1 && step <= 3) {
+      setCurrent(step);
+    }
   };
 
   // Save draft (does NOT mark step completed)
@@ -138,7 +136,7 @@ export default function Dashboard({ userId }) {
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <div className="max-w-3xl mx-auto bg-white p-6 rounded shadow">
-        <h1 className="text-2xl font-bold mb-2">Dashboard</h1>
+        <h1 className="text-2xl font-bold mb-2">{user.dive_center_name || 'Dashboard'}</h1>
         <p className="mb-4">Welcome, {user.name}</p>
         <Stepper current={current} completed={completed} goTo={goTo} />
 

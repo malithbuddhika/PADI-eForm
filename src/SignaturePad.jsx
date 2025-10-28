@@ -286,23 +286,12 @@ const SignaturePad = forwardRef(function SignaturePad({
   }));
   return (
     <div className={`${fullScreen ? 'fixed inset-0 z-50 bg-white' : 'w-full h-full'}`}>
-      <div className={`${fullScreen ? 'w-full h-full' : 'border rounded-md overflow-hidden w-full h-full bg-white'}`}>
+      <div className={`${fullScreen ? 'w-full h-full' : 'w-full h-full bg-white'}`}>
         <canvas 
           ref={canvasRef} 
           className="w-full h-full block touch-none select-none"
         />
       </div>
-      {!fullScreen && (
-        <div className="flex gap-2 mt-2">
-          <button 
-            type="button" 
-            onClick={clear} 
-            className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 active:bg-gray-400 transition-colors"
-          >
-            Clear
-          </button>
-        </div>
-      )}
     </div>
   );
 });

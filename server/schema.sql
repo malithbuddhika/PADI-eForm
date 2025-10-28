@@ -1,12 +1,24 @@
 CREATE DATABASE IF NOT EXISTS padi;
 USE padi;
 
+-- Main dive center table (must be created first due to foreign key reference)
+CREATE TABLE IF NOT EXISTS dive_centers (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    address TEXT,
+    phone VARCHAR(50),
+    email VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS `user` (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   email VARCHAR(100) NOT NULL UNIQUE,
   birthday DATE NOT NULL,
-  language VARCHAR(20) NOT NULL
+  language VARCHAR(20) NOT NULL,
+  dive_center_id INT,
+  FOREIGN KEY (dive_center_id) REFERENCES dive_centers(id)
 );
 
 CREATE TABLE IF NOT EXISTS forms (
@@ -65,18 +77,8 @@ CREATE TABLE IF NOT EXISTS drafts (
   FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE
 );
 
--- Main dive center table
-CREATE TABLE dive_centers (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(255) NOT NULL,
-    address TEXT,
-    phone VARCHAR(50),
-    email VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Staff table with role differentiation
-CREATE TABLE staff (
+CREATE TABLE IF NOT EXISTS staff (
     id INT PRIMARY KEY AUTO_INCREMENT,
     dive_center_id INT,
     name VARCHAR(255) NOT NULL,

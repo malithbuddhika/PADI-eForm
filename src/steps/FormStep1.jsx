@@ -234,14 +234,14 @@ export default function FormStep1 ({ user, draft, onDraft }) {
             {/* Inline pad for desktop */}
             {!isMobile && activePad === 'participant' && (
               <div className="mt-3">
-                <div className="relative border rounded-lg shadow p-2 bg-white">
+                <div className="relative border-2 border-gray-300 rounded-lg shadow bg-white" style={{ padding: '5px' }}>
                   <SignaturePad
                     ref={participantPadRef}
                     onChange={(val) => setLiveParticipant(val)}
                     initialData={participantSignature && !participantSignature.startsWith('data:') ? `/signatures/${participantSignature}` : ''}
                     strokeWidth={3}
                   />
-                  <div className="absolute top-2 right-2 flex gap-2">
+                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-2">
                     <button onClick={() => {
                       // save from pad ref
                       try { const d = participantPadRef.current.getDataURL(); setLiveParticipant(d) } catch (e) {}
@@ -273,14 +273,14 @@ export default function FormStep1 ({ user, draft, onDraft }) {
               </div>
               {!isMobile && activePad === 'guardian' && (
                 <div className="mt-3">
-                  <div className="relative border rounded-lg shadow p-2 bg-white">
+                  <div className="relative border-2 border-gray-300 rounded-lg shadow bg-white" style={{ padding: '5px' }}>
                     <SignaturePad
                       ref={guardianPadRef}
                       onChange={(val) => setLiveGuardian(val)}
                       initialData={guardianSignature && !guardianSignature.startsWith('data:') ? `/signatures/${guardianSignature}` : ''}
                       strokeWidth={3}
                     />
-                    <div className="absolute top-2 right-2 flex gap-2">
+                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-2">
                       <button onClick={() => { try { const d = guardianPadRef.current.getDataURL(); setLiveGuardian(d) } catch (e) {} saveSignature('guardian') }} className="px-3 py-1 bg-green-600 text-white rounded shadow">Save</button>
                       <button onClick={() => { try { guardianPadRef.current.clear() } catch (e) {} setLiveGuardian(''); setGuardianSignature(''); setGuardianDate(''); setMessage('Guardian signature cleared') }} className="px-3 py-1 bg-gray-200 rounded shadow">Clear</button>
                       <button onClick={() => setActivePad(null)} className="px-3 py-1 bg-gray-100 rounded shadow">Close</button>
@@ -301,26 +301,26 @@ export default function FormStep1 ({ user, draft, onDraft }) {
 
       {/* Mobile / fullscreen modal for signature */}
       {isMobile && activePad && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
-          <div className="bg-white w-full h-full p-4">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-lg font-semibold">{activePad === 'participant' ? 'Participant Signature' : 'Parent/Guardian Signature'}</h3>
-              <button onClick={() => setActivePad(null)} className="px-3 py-1">Close</button>
-            </div>
-            <div className="h-full relative">
+        <div className="fixed inset-0 bg-white z-50 flex flex-col">
+          <div className="flex justify-between items-center p-4 border-b border-gray-300">
+            <h3 className="text-lg font-semibold">{activePad === 'participant' ? 'Participant Signature' : 'Parent/Guardian Signature'}</h3>
+            <button onClick={() => setActivePad(null)} className="px-3 py-1 text-blue-600">✕</button>
+          </div>
+          <div className="flex-1 p-4 overflow-hidden">
+            <div className="w-full h-full border-4 border-black rounded-lg bg-white" style={{ padding: '10px' }}>
               <SignaturePad
                 ref={activePad === 'participant' ? participantPadRef : guardianPadRef}
-                fullScreen={true}
+                fullScreen={false}
                 onChange={activePad === 'participant' ? setLiveParticipant : setLiveGuardian}
                 initialData={(activePad === 'participant' ? (participantSignature && !participantSignature.startsWith('data:') ? `/signatures/${participantSignature}` : '') : (guardianSignature && !guardianSignature.startsWith('data:') ? `/signatures/${guardianSignature}` : ''))}
                 strokeWidth={2}
               />
-              <div className="absolute top-4 right-4 flex gap-2 z-60">
-                <button onClick={() => { try { const d = (activePad === 'participant' ? participantPadRef.current.getDataURL() : guardianPadRef.current.getDataURL()); if (activePad === 'participant') setLiveParticipant(d); else setLiveGuardian(d); } catch (e) {} saveSignature(activePad) }} className="px-3 py-2 bg-green-600 text-white rounded shadow-lg">Save</button>
-                <button onClick={() => { try { if (activePad === 'participant') participantPadRef.current.clear(); else guardianPadRef.current.clear(); } catch (e) {} if (activePad === 'participant') { setParticipantSignature(''); setParticipantDate('') } else { setGuardianSignature(''); setGuardianDate('') } setMessage('Signature cleared') }} className="px-3 py-2 bg-gray-200 rounded shadow-lg">Clear</button>
-                <button onClick={() => setActivePad(null)} className="px-3 py-2 bg-gray-100 rounded shadow-lg">Close</button>
-              </div>
             </div>
+          </div>
+          <div className="p-4 border-t border-gray-300 flex justify-center gap-3">
+            <button onClick={() => { try { const d = (activePad === 'participant' ? participantPadRef.current.getDataURL() : guardianPadRef.current.getDataURL()); if (activePad === 'participant') setLiveParticipant(d); else setLiveGuardian(d); } catch (e) {} saveSignature(activePad) }} className="px-6 py-3 bg-green-600 text-white rounded-lg shadow-lg font-semibold">Save</button>
+            <button onClick={() => { try { if (activePad === 'participant') participantPadRef.current.clear(); else guardianPadRef.current.clear(); } catch (e) {} if (activePad === 'participant') { setParticipantSignature(''); setParticipantDate('') } else { setGuardianSignature(''); setGuardianDate('') } setMessage('Signature cleared') }} className="px-6 py-3 bg-gray-300 text-gray-800 rounded-lg shadow-lg font-semibold">Clear</button>
+            <button onClick={() => setActivePad(null)} className="px-6 py-3 bg-gray-500 text-white rounded-lg shadow-lg font-semibold">Close</button>
           </div>
         </div>
       )}
