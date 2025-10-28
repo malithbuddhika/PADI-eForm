@@ -122,7 +122,16 @@ export default function FormStep2({ user, draft, onDraft, onBack }) {
     }
   };
 
-  const handleSaveDraft = () => {
+  const handleNext = () => {
+    if (!participantSignature) {
+      setMessage('Participant signature is required.');
+      return;
+    }
+    if (isUnder18 && !guardianSignature) {
+      setMessage('Parent/Guardian signature is required for participants under 18.');
+      return;
+    }
+
     const payload = {
       fieldB,
       birthdate,
@@ -132,7 +141,7 @@ export default function FormStep2({ user, draft, onDraft, onBack }) {
       guardian_signature_date: guardianDate || null
     };
     onDraft(payload);
-    setMessage('Draft saved successfully');
+    setMessage('Saved successfully');
     setTimeout(() => setMessage(''), 3000);
   };
   return (
@@ -164,7 +173,6 @@ export default function FormStep2({ user, draft, onDraft, onBack }) {
           </p>
         </div>
 
-        /* Liability Release Header */
         <div className="mb-3">
           <h2 className="text-base font-bold mb-1 bg-black text-white px-3 py-2 -mx-3">Liability Release and Assumption of Risk Agreement</h2>
           <p className="text-xs text-red-600 mt-1">In European Union and European Free Trade Association countries use alternative form.</p>
@@ -369,10 +377,10 @@ export default function FormStep2({ user, draft, onDraft, onBack }) {
           </button>
           <button
             type="button"
-            onClick={handleSaveDraft}
+            onClick={handleNext}
             className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
-            Save Draft
+            Next
           </button>
         </div>
       </div>

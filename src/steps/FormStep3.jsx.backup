@@ -28,7 +28,6 @@ export default function FormStep3({ user, draft, onSubmit, onBack }) {
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
   const [activePad, setActivePad] = useState(null); // 'participant' | 'guardian' | null
   const [message, setMessage] = useState('');
-  const [validationAttempted, setValidationAttempted] = useState(false);
   const [liveParticipant, setLiveParticipant] = useState('');
   const [liveGuardian, setLiveGuardian] = useState('');
   const participantPadRef = useRef(null);
@@ -152,72 +151,11 @@ export default function FormStep3({ user, draft, onSubmit, onBack }) {
     }));
   };
 
-  const handleSubmit = () => {
-    setValidationAttempted(true);
-    const missing = [];
-
-    // Validate main questions 1-10
-    for (let i = 1; i <= 10; i++) {
-      const qKey = `q${i}`;
-      if (!formData[qKey]) {
-        missing.push(`Question ${i}`);
-      }
-    }
-
-    // Validate box questions - only if main question is "yes"
-    const boxMapping = {
-      q1: { box: 'boxA', count: 5, name: 'Box A' },
-      q2: { box: 'boxB', count: 4, name: 'Box B' },
-      q4: { box: 'boxC', count: 4, name: 'Box C' },
-      q6: { box: 'boxD', count: 5, name: 'Box D' },
-      q7: { box: 'boxE', count: 4, name: 'Box E' },
-      q8: { box: 'boxF', count: 5, name: 'Box F' },
-      q9: { box: 'boxG', count: 6, name: 'Box G' }
-    };
-
-    Object.entries(boxMapping).forEach(([qKey, { box, count, name }]) => {
-      if (formData[qKey] === 'yes') {
-        for (let i = 1; i <= count; i++) {
-          if (!formData[box][`q${i}`]) {
-            missing.push(`${name} - Question ${i}`);
-          }
-        }
-      }
-    });
-
-    // Show validation errors
-    if (missing.length > 0) {
-      const missingList = missing.join(', ');
-      setMessage(`Please answer all required questions. Missing: ${missingList}`);
-      setTimeout(() => setMessage(''), 10000);
-      
-      // Scroll to top to show error message
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
-    // Validate signatures
-    if (!participantSignature) {
-      setMessage('Participant signature is required.');
-      setTimeout(() => setMessage(''), 3000);
-      return;
-    }
-    if (isUnder18 && !guardianSignature) {
-      setMessage('Parent/Guardian signature is required for participants under 18.');
-      setTimeout(() => setMessage(''), 3000);
-      return;
-    }
-
-    const payload = {
-      formData,
-      birthdate,
-      participant_signature: participantSignature,
-      participant_signature_date: participantDate,
-      guardian_signature: guardianSignature || null,
-      guardian_signature_date: guardianDate || null
-    };
-    
-    onSubmit(payload);
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   // Check if physician evaluation is required
@@ -239,133 +177,121 @@ export default function FormStep3({ user, draft, onSubmit, onBack }) {
     formData.q7 === 'no' && formData.q8 === 'no' && formData.q9 === 'no' && 
     formData.q10 === 'no';
 
-  const renderBoxQuestion = (box, number, question) => {
-    const isUnanswered = validationAttempted && !formData[box][`q${number}`];
-    return (
-      <div className={`mb-3 p-2 rounded ${isUnanswered ? 'bg-red-50 border-2 border-red-300' : ''}`}>
-        <label className="block mb-2 text-sm">
-          {question}
-          {isUnanswered && <span className="ml-2 text-red-600 font-semibold">⚠ Required</span>}
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log('Form submitted:', formData);
+    // Handle form submission logic here
+  };
+
+  const renderBoxQuestion = (box, number, question) => (
+    <div className="mb-3">
+      <label className="block mb-2 text-sm">{question}</label>
+      <div className="flex gap-4">
+        <label className="flex items-center gap-2">
+          <input 
+            type="radio" 
+            name={`${box}_q${number}`} 
+            value="yes" 
+            checked={formData[box][`q${number}`] === 'yes'}
+            onChange={(e) => handleBoxQuestionChange(box, `q${number}`, e.target.value)}
+            className="w-4 h-4"
+          />
+          Yes ☐*
         </label>
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2">
-            <input 
-              type="radio" 
-              name={`${box}_q${number}`} 
-              value="yes" 
-              checked={formData[box][`q${number}`] === 'yes'}
-              onChange={(e) => handleBoxQuestionChange(box, `q${number}`, e.target.value)}
-              className="w-4 h-4"
-            />
-            Yes ☐*
-          </label>
-          <label className="flex items-center gap-2">
-            <input 
-              type="radio" 
-              name={`${box}_q${number}`} 
-              value="no" 
-              checked={formData[box][`q${number}`] === 'no'}
-              onChange={(e) => handleBoxQuestionChange(box, `q${number}`, e.target.value)}
-              className="w-4 h-4"
-            />
-            No ☐
-          </label>
-        </div>
+        <label className="flex items-center gap-2">
+          <input 
+            type="radio" 
+            name={`${box}_q${number}`} 
+            value="no" 
+            checked={formData[box][`q${number}`] === 'no'}
+            onChange={(e) => handleBoxQuestionChange(box, `q${number}`, e.target.value)}
+            className="w-4 h-4"
+          />
+          No ☐
+        </label>
       </div>
-    );
-  };
+    </div>
+  );
 
-  const renderQuestionWithBox = (number, question, box, boxQuestions) => {
-    const isUnanswered = validationAttempted && !formData[`q${number}`];
-    return (
-      <div className={`border-b pb-4 ${isUnanswered ? 'bg-red-50 border-2 border-red-300 p-3 rounded' : ''}`}>
-        <div className="flex items-start gap-4">
-          <span className="font-bold min-w-6">{number}</span>
-          <div className="flex-1">
-            <label className="block mb-2">
-              {question}
-              {isUnanswered && <span className="ml-2 text-red-600 font-semibold">⚠ Required</span>}
+  const renderQuestionWithBox = (number, question, box, boxQuestions) => (
+    <div className="border-b pb-4">
+      <div className="flex items-start gap-4">
+        <span className="font-bold min-w-6">{number}</span>
+        <div className="flex-1">
+          <label className="block mb-2">{question}</label>
+          <div className="flex gap-4 mb-3">
+            <label className="flex items-center gap-2">
+              <input 
+                type="radio" 
+                name={`q${number}`} 
+                value="yes" 
+                checked={formData[`q${number}`] === 'yes'}
+                onChange={(e) => handleMainQuestionChange(`q${number}`, e.target.value)} 
+                className="w-4 h-4"
+              />
+              Yes ☐ Go to box {box}
             </label>
-            <div className="flex gap-4 mb-3">
-              <label className="flex items-center gap-2">
-                <input 
-                  type="radio" 
-                  name={`q${number}`} 
-                  value="yes" 
-                  checked={formData[`q${number}`] === 'yes'}
-                  onChange={(e) => handleMainQuestionChange(`q${number}`, e.target.value)} 
-                  className="w-4 h-4"
-                />
-                Yes ☐ Go to box {box}
-              </label>
-              <label className="flex items-center gap-2">
-                <input 
-                  type="radio" 
-                  name={`q${number}`} 
-                  value="no" 
-                  checked={formData[`q${number}`] === 'no'}
-                  onChange={(e) => handleMainQuestionChange(`q${number}`, e.target.value)}
-                  className="w-4 h-4"
-                />
-                No ☐
-              </label>
-            </div>
-            
-            {/* Box appears right below the question when "Yes" is selected */}
-            {formData[`q${number}`] === 'yes' && (
-              <div className="mt-4 p-4 border-2 border-blue-500 rounded-lg bg-blue-50">
-                <h3 className="font-bold text-lg mb-4">BOX {box} – I HAVE/HAVE HAD:</h3>
-                <div className="space-y-3">
-                  {boxQuestions}
-                </div>
+            <label className="flex items-center gap-2">
+              <input 
+                type="radio" 
+                name={`q${number}`} 
+                value="no" 
+                checked={formData[`q${number}`] === 'no'}
+                onChange={(e) => handleMainQuestionChange(`q${number}`, e.target.value)}
+                className="w-4 h-4"
+              />
+              No ☐
+            </label>
+          </div>
+          
+          {/* Box appears right below the question when "Yes" is selected */}
+          {formData[`q${number}`] === 'yes' && (
+            <div className="mt-4 p-4 border-2 border-blue-500 rounded-lg bg-blue-50">
+              <h3 className="font-bold text-lg mb-4">BOX {box} – I HAVE/HAVE HAD:</h3>
+              <div className="space-y-3">
+                {boxQuestions}
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderSimpleQuestion = (number, question) => {
-    const isUnanswered = validationAttempted && !formData[`q${number}`];
-    return (
-      <div className={`border-b pb-4 ${isUnanswered ? 'bg-red-50 border-2 border-red-300 p-3 rounded' : ''}`}>
-        <div className="flex items-start gap-4">
-          <span className="font-bold min-w-6">{number}</span>
-          <div className="flex-1">
-            <label className="block mb-2">
-              {question}
-              {isUnanswered && <span className="ml-2 text-red-600 font-semibold">⚠ Required</span>}
-            </label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2">
-                <input 
-                  type="radio" 
-                  name={`q${number}`} 
-                  value="yes" 
-                  checked={formData[`q${number}`] === 'yes'}
-                  onChange={(e) => handleMainQuestionChange(`q${number}`, e.target.value)} 
-                  className="w-4 h-4"
-                />
-                Yes ☐
-              </label>
-              <label className="flex items-center gap-2">
-                <input 
-                  type="radio" 
-                  name={`q${number}`} 
-                  value="no" 
-                  checked={formData[`q${number}`] === 'no'}
-                  onChange={(e) => handleMainQuestionChange(`q${number}`, e.target.value)}
-                  className="w-4 h-4"
-                />
-                No ☐
-              </label>
             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSimpleQuestion = (number, question) => (
+    <div className="border-b pb-4">
+      <div className="flex items-start gap-4">
+        <span className="font-bold min-w-6">{number}</span>
+        <div className="flex-1">
+          <label className="block mb-2">{question}</label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2">
+              <input 
+                type="radio" 
+                name={`q${number}`} 
+                value="yes" 
+                checked={formData[`q${number}`] === 'yes'}
+                onChange={(e) => handleMainQuestionChange(`q${number}`, e.target.value)} 
+                className="w-4 h-4"
+              />
+              Yes ☐
+            </label>
+            <label className="flex items-center gap-2">
+              <input 
+                type="radio" 
+                name={`q${number}`} 
+                value="no" 
+                checked={formData[`q${number}`] === 'no'}
+                onChange={(e) => handleMainQuestionChange(`q${number}`, e.target.value)}
+                className="w-4 h-4"
+              />
+              No ☐
+            </label>
           </div>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -522,138 +448,76 @@ export default function FormStep3({ user, draft, onSubmit, onBack }) {
               <p><strong>Participant Statement:</strong> I have answered all questions honestly, and understand that I accept responsibility for any consequences resulting from any questions I may have answered inaccurately or for my failure to disclose any existing or past health conditions.</p>
             </div>
 
-            {/* Signature area previews */}
-            <div className="space-y-6 mt-8">
+            <div className="space-y-4">
               <div>
-                <label className="block font-semibold mb-2 text-sm">Participant's Signature</label>
-                <div className="flex items-center gap-4">
-                  <div className="flex-1">
-                    {participantSignature ? (
-                      <img src={participantSignature && !participantSignature.startsWith('data:') ? `/signatures/${participantSignature}` : participantSignature} alt="participant signature" className="border rounded" style={{ maxHeight: 160, width: '100%', objectFit: 'contain' }} />
-                    ) : (
-                      <div onClick={() => setActivePad('participant')} className="h-40 border rounded flex items-center justify-center text-gray-400 cursor-pointer">Tap to sign</div>
-                    )}
-                  </div>
-                  <div className="w-40">
-                    <label className="block font-semibold text-sm">Date (Day / Month / Year)</label>
-                    <input value={participantDate} readOnly placeholder="DD/MM/YYYY" className="w-full border-b border-gray-400 py-1 text-sm" />
-                  </div>
-                </div>
-                {/* Inline pad for desktop */}
-                {!isMobile && activePad === 'participant' && (
-                  <div className="mt-3">
-                    <div className="relative border-2 border-gray-300 rounded-lg shadow bg-white" style={{ padding: '5px' }}>
-                      <SignaturePad
-                        ref={participantPadRef}
-                        onChange={(val) => setLiveParticipant(val)}
-                        initialData={participantSignature && !participantSignature.startsWith('data:') ? `/signatures/${participantSignature}` : ''}
-                        strokeWidth={3}
-                      />
-                      <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-2">
-                        <button onClick={() => {
-                          try { const d = participantPadRef.current.getDataURL(); setLiveParticipant(d) } catch (e) {}
-                          saveSignature('participant')
-                        }} className="px-3 py-1 bg-green-600 text-white rounded shadow">Save</button>
-                        <button onClick={() => { try { participantPadRef.current.clear() } catch (e) {} setLiveParticipant(''); setParticipantSignature(''); setParticipantDate(''); setMessage('Participant signature cleared') }} className="px-3 py-1 bg-gray-200 rounded shadow">Clear</button>
-                        <button onClick={() => setActivePad(null)} className="px-3 py-1 bg-gray-100 rounded shadow">Close</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <label className="block font-semibold mb-2">Participant Signature (or, if a minor, participant's parent/guardian signature required:</label>
+                <input 
+                  type="text" 
+                  className="w-full border-b border-gray-400 focus:border-blue-500 focus:outline-none py-1"
+                  value={formData.participantName}
+                  onChange={(e) => handleInputChange('participantName', e.target.value)}
+                  placeholder="Participant name"
+                />
               </div>
 
-              {isUnder18 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-semibold mb-2 text-sm">Signature of Parent or Guardian (where applicable)</label>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      {guardianSignature ? (
-                        <img src={guardianSignature && !guardianSignature.startsWith('data:') ? `/signatures/${guardianSignature}` : guardianSignature} alt="guardian signature" className="border rounded" style={{ maxHeight: 160, width: '100%', objectFit: 'contain' }} />
-                      ) : (
-                        <div onClick={() => setActivePad('guardian')} className="h-40 border rounded flex items-center justify-center text-gray-400 cursor-pointer">Tap to sign</div>
-                      )}
-                    </div>
-                    <div className="w-40">
-                      <label className="block font-semibold text-sm">Date (Day / Month / Year)</label>
-                      <input value={guardianDate} readOnly placeholder="DD/MM/YYYY" className="w-full border-b border-gray-400 py-1 text-sm" />
-                    </div>
-                  </div>
-                  {!isMobile && activePad === 'guardian' && (
-                    <div className="mt-3">
-                      <div className="relative border-2 border-gray-300 rounded-lg shadow bg-white" style={{ padding: '5px' }}>
-                        <SignaturePad
-                          ref={guardianPadRef}
-                          onChange={(val) => setLiveGuardian(val)}
-                          initialData={guardianSignature && !guardianSignature.startsWith('data:') ? `/signatures/${guardianSignature}` : ''}
-                          strokeWidth={3}
-                        />
-                        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-2">
-                          <button onClick={() => { try { const d = guardianPadRef.current.getDataURL(); setLiveGuardian(d) } catch (e) {} saveSignature('guardian') }} className="px-3 py-1 bg-green-600 text-white rounded shadow">Save</button>
-                          <button onClick={() => { try { guardianPadRef.current.clear() } catch (e) {} setLiveGuardian(''); setGuardianSignature(''); setGuardianDate(''); setMessage('Guardian signature cleared') }} className="px-3 py-1 bg-gray-200 rounded shadow">Clear</button>
-                          <button onClick={() => setActivePad(null)} className="px-3 py-1 bg-gray-100 rounded shadow">Close</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  <label className="block font-semibold mb-2">Date (dd/mm/yyyy)</label>
+                  <input 
+                    type="date" 
+                    className="w-full border-b border-gray-400 focus:border-blue-500 focus:outline-none py-1"
+                    value={formData.date}
+                    onChange={(e) => handleInputChange('date', e.target.value)}
+                  />
                 </div>
-              )}
+                <div>
+                  <label className="block font-semibold mb-2">Birthdate (dd/mm/yyyy)</label>
+                  <input 
+                    type="date" 
+                    className="w-full border-b border-gray-400 focus:border-blue-500 focus:outline-none py-1"
+                    value={formData.birthdate}
+                    onChange={(e) => handleInputChange('birthdate', e.target.value)}
+                  />
+                </div>
+              </div>
 
-              {message && (
-                <div className={`p-3 rounded-md text-sm ${
-                  message.includes('Missing') || message.includes('required') 
-                    ? 'bg-red-50 border border-red-300 text-red-800' 
-                    : 'bg-green-50 border border-green-300 text-green-800'
-                }`}>
-                  {message}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold mb-2">Instructor Name (Print)</label>
+                  <input 
+                    type="text" 
+                    className="w-full border-b border-gray-400 focus:border-blue-500 focus:outline-none py-1"
+                    value={formData.instructorName}
+                    onChange={(e) => handleInputChange('instructorName', e.target.value)}
+                    placeholder="Instructor name"
+                  />
                 </div>
-              )}
+                <div>
+                  <label className="block font-semibold mb-2">Facility Name (Print)</label>
+                <input 
+                  type="text" 
+                  className="w-full border-b border-gray-400 focus:border-blue-500 focus:outline-none py-1"
+                  value={formData.facilityName}
+                  onChange={(e) => handleInputChange('facilityName', e.target.value)}
+                  placeholder="Facility name"
+                />
+                </div>
+              </div>
             </div>
 
-            <div className="flex gap-4 mt-8">
+            <div className="flex justify-end mt-8">
               <button 
-                type="button"
-                onClick={onBack}
-                className="px-6 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-              >
-                Back
-              </button>
-              <button 
-                type="button"
-                onClick={handleSubmit}
-                className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-semibold"
+                type="submit" 
+                className="bg-green-600 text-white px-8 py-3 rounded hover:bg-green-700 font-semibold"
               >
                 Submit Form
               </button>
             </div>
           </div>
         </form>
-
-        {/* Mobile / fullscreen modal for signature */}
-        {isMobile && activePad && (
-          <div className="fixed inset-0 bg-white z-50 flex flex-col">
-            <div className="flex justify-between items-center p-4 border-b border-gray-300">
-              <h3 className="text-lg font-semibold">{activePad === 'participant' ? 'Participant Signature' : 'Parent/Guardian Signature'}</h3>
-              <button onClick={() => setActivePad(null)} className="px-3 py-1 text-blue-600">✕</button>
-            </div>
-            <div className="flex-1 p-4 overflow-hidden">
-              <div className="w-full h-full border-4 border-black rounded-lg bg-white" style={{ padding: '10px' }}>
-                <SignaturePad
-                  ref={activePad === 'participant' ? participantPadRef : guardianPadRef}
-                  fullScreen={false}
-                  onChange={activePad === 'participant' ? setLiveParticipant : setLiveGuardian}
-                  initialData={(activePad === 'participant' ? (participantSignature && !participantSignature.startsWith('data:') ? `/signatures/${participantSignature}` : '') : (guardianSignature && !guardianSignature.startsWith('data:') ? `/signatures/${guardianSignature}` : ''))}
-                  strokeWidth={2}
-                />
-              </div>
-            </div>
-            <div className="p-4 border-t border-gray-300 flex justify-center gap-3">
-              <button onClick={() => { try { const d = (activePad === 'participant' ? participantPadRef.current.getDataURL() : guardianPadRef.current.getDataURL()); if (activePad === 'participant') setLiveParticipant(d); else setLiveGuardian(d); } catch (e) {} saveSignature(activePad) }} className="px-6 py-3 bg-green-600 text-white rounded-lg shadow-lg font-semibold">Save</button>
-              <button onClick={() => { try { if (activePad === 'participant') participantPadRef.current.clear(); else guardianPadRef.current.clear(); } catch (e) {} if (activePad === 'participant') { setParticipantSignature(''); setParticipantDate('') } else { setGuardianSignature(''); setGuardianDate('') } setMessage('Signature cleared') }} className="px-6 py-3 bg-gray-300 text-gray-800 rounded-lg shadow-lg font-semibold">Clear</button>
-              <button onClick={() => setActivePad(null)} className="px-6 py-3 bg-gray-500 text-white rounded-lg shadow-lg font-semibold">Close</button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 };
+
+export default DiverMedicalForm;
