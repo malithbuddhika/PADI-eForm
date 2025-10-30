@@ -5,7 +5,17 @@ import nodemailer from 'nodemailer';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+
+// Import PDF generation modules
+import { generateForm1PDF } from './PDF Process/English/EnglishFormStep1PDFProcess.js';
+import { generateForm2PDF } from './PDF Process/English/EnglishFormStep2PDFProcess.js';
+import { generateForm3PDF } from './PDF Process/English/EnglishFormStep3PDFProcess.js';
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config();
@@ -106,155 +116,104 @@ const transporter = EMAIL_MODE === 'test'
       }
     });
 
-const sigDir = path.join(process.cwd(), 'server', 'signatures');
+// Use __dirname to always reference the server folder correctly
+const sigDir = path.join(__dirname, 'signatures');
 if (!fs.existsSync(sigDir)) fs.mkdirSync(sigDir, { recursive: true });
-const previewDir = path.join(process.cwd(), 'server', 'previews');
-if (!fs.existsSync(previewDir)) fs.mkdirSync(previewDir, { recursive: true });
+
+// Simple PDF folder - only stores completed PDFs
+const pdfsDir = path.join(__dirname, 'pdfs');
+if (!fs.existsSync(pdfsDir)) fs.mkdirSync(pdfsDir, { recursive: true });
 
 // Function to generate PDF with all three forms
 const generateCompletePDF = async (userId, userName, form1Data, form2Data, form3Data) => {
   return new Promise((resolve, reject) => {
-    const filename = `complete_forms_${userId}_${Date.now()}.pdf`;
-    const filePath = path.join(previewDir, filename);
+    const filename = `CompleteForms_${userId}_${Date.now()}.pdf`;
+    const filePath = path.join(pdfsDir, filename);
     const doc = new PDFDocument({ margin: 50, size: 'A4' });
     const stream = fs.createWriteStream(filePath);
     
-    doc.pipe(stream);
-
-    // Helper to add signature image
-    const addSignature = (doc, signaturePath, label, yPosition) => {
-      if (signaturePath) {
-        const fullPath = signaturePath.startsWith('data:') 
-          ? null 
-          : path.join(sigDir, signaturePath);
-        
-        if (fullPath && fs.existsSync(fullPath)) {
-          doc.fontSize(10).text(label, 50, yPosition);
-          try {
-            doc.image(fullPath, 50, yPosition + 15, { width: 200, height: 60 });
-          } catch (e) {
-            doc.text('(Signature image error)', 50, yPosition + 15);
-          }
+    // Collect all signature file paths to delete after PDF generation
+    const signatureFiles = [];
+    
+    // Helper function to collect signature paths
+    const collectSignaturePath = (signaturePath, label) => {
+      if (signaturePath && !signaturePath.startsWith('data:')) {
+        const fullPath = path.join(sigDir, signaturePath);
+        console.log(`Checking signature [${label}]: ${signaturePath}`);
+        if (fs.existsSync(fullPath)) {
+          signatureFiles.push(fullPath);
+          console.log(`  ✓ Found and queued for deletion: ${fullPath}`);
         } else {
-          doc.fontSize(10).text(`${label}: (No signature)`, 50, yPosition);
+          console.log(`  ✗ File not found: ${fullPath}`);
         }
+      } else if (signaturePath && signaturePath.startsWith('data:')) {
+        console.log(`Skipping base64 signature [${label}]`);
       }
     };
-
-    // FORM 1 - Standard Safe Diving Practices
-    doc.fontSize(18).text('PADI e-Forms - Complete Submission', { align: 'center' });
-    doc.fontSize(12).text(`Participant: ${userName}`, { align: 'center' });
-    doc.moveDown(2);
     
-    doc.fontSize(16).text('Form 1: Standard Safe Diving Practices Statement', { underline: true });
-    doc.moveDown();
-    doc.fontSize(10).text('This form confirms understanding of safe diving practices.');
-    doc.moveDown();
+    // Collect all signature files from all forms
+    collectSignaturePath(form1Data.participant_signature, 'Form1-Participant');
+    collectSignaturePath(form1Data.guardian_signature, 'Form1-Guardian');
+    collectSignaturePath(form2Data.participant_signature, 'Form2-Participant');
+    collectSignaturePath(form2Data.guardian_signature, 'Form2-Guardian');
+    collectSignaturePath(form3Data.participant_signature, 'Form3-Participant');
+    collectSignaturePath(form3Data.guardian_signature, 'Form3-Guardian');
     
-    if (form1Data.birthdate) {
-      doc.text(`Birthdate: ${form1Data.birthdate}`);
-      doc.moveDown(0.5);
-    }
-    
-    let currentY = doc.y;
-    addSignature(doc, form1Data.participant_signature, 'Participant Signature', currentY);
-    currentY = doc.y + 80;
-    
-    if (form1Data.participant_signature_date) {
-      doc.fontSize(10).text(`Date: ${form1Data.participant_signature_date}`, 50, currentY);
-      currentY += 20;
-    }
-    
-    if (form1Data.guardian_signature) {
-      addSignature(doc, form1Data.guardian_signature, 'Guardian Signature', currentY);
-      currentY = doc.y + 80;
-      if (form1Data.guardian_signature_date) {
-        doc.fontSize(10).text(`Date: ${form1Data.guardian_signature_date}`, 50, currentY);
-      }
-    }
-
-    // PAGE 2 - FORM 2
-    doc.addPage();
-    doc.fontSize(16).text('Form 2: Non-Agency Disclosure and Liability Release', { underline: true });
-    doc.moveDown();
-    
-    if (form2Data.dive_center_name || form2Data.instructor_names) {
-      doc.fontSize(10);
-      if (form2Data.dive_center_name) {
-        doc.text(`Dive Center: ${form2Data.dive_center_name}`);
-      }
-      if (form2Data.instructor_names) {
-        doc.text(`Instructors: ${form2Data.instructor_names}`);
-      }
-      doc.moveDown();
-    }
-    
-    currentY = doc.y;
-    addSignature(doc, form2Data.participant_signature, 'Participant Signature', currentY);
-    currentY = doc.y + 80;
-    
-    if (form2Data.participant_signature_date) {
-      doc.fontSize(10).text(`Date: ${form2Data.participant_signature_date}`, 50, currentY);
-      currentY += 20;
-    }
-    
-    if (form2Data.guardian_signature) {
-      addSignature(doc, form2Data.guardian_signature, 'Guardian Signature', currentY);
-      currentY = doc.y + 80;
-      if (form2Data.guardian_signature_date) {
-        doc.fontSize(10).text(`Date: ${form2Data.guardian_signature_date}`, 50, currentY);
-      }
-    }
-
-    // PAGE 3 - FORM 3
-    doc.addPage();
-    doc.fontSize(16).text('Form 3: Diver Medical Participant Questionnaire', { underline: true });
-    doc.moveDown();
-    doc.fontSize(10).text('Medical questionnaire responses and signatures.');
-    doc.moveDown();
-    
-    if (form3Data.formData) {
-      doc.fontSize(10).text('Main Questions:');
-      for (let i = 1; i <= 10; i++) {
-        const answer = form3Data.formData[`q${i}`];
-        if (answer) {
-          doc.text(`Q${i}: ${answer.toUpperCase()}`);
-        }
-      }
-      doc.moveDown();
-      
-      // Show box answers if any "yes" responses
-      const boxes = ['boxA', 'boxB', 'boxC', 'boxD', 'boxE', 'boxF', 'boxG'];
-      boxes.forEach(box => {
-        const boxData = form3Data.formData[box];
-        if (boxData && Object.values(boxData).some(v => v === 'yes')) {
-          doc.text(`${box.toUpperCase()} responses included`);
+    // Also find and delete all draft signatures for this user
+    console.log(`Searching for draft signatures for user ${userId}...`);
+    try {
+      const allFiles = fs.readdirSync(sigDir);
+      const userDraftFiles = allFiles.filter(file => 
+        file.includes(`_${userId}_draft`) || file.includes(`_${userId}_form`)
+      );
+      userDraftFiles.forEach(file => {
+        const fullPath = path.join(sigDir, file);
+        if (!signatureFiles.includes(fullPath)) {
+          signatureFiles.push(fullPath);
+          console.log(`  ✓ Found draft signature: ${file}`);
         }
       });
-      doc.moveDown();
+    } catch (err) {
+      console.error('Error scanning for draft signatures:', err);
     }
     
-    currentY = doc.y;
-    addSignature(doc, form3Data.participant_signature, 'Participant Signature', currentY);
-    currentY = doc.y + 80;
+    console.log(`Total signatures queued for deletion: ${signatureFiles.length}`);
     
-    if (form3Data.participant_signature_date) {
-      doc.fontSize(10).text(`Date: ${form3Data.participant_signature_date}`, 50, currentY);
-      currentY += 20;
-    }
-    
-    if (form3Data.guardian_signature) {
-      addSignature(doc, form3Data.guardian_signature, 'Guardian Signature', currentY);
-      currentY = doc.y + 80;
-      if (form3Data.guardian_signature_date) {
-        doc.fontSize(10).text(`Date: ${form3Data.guardian_signature_date}`, 50, currentY);
-      }
-    }
+    doc.pipe(stream);
+
+    // Generate Form 1 PDF (Page 1)
+    generateForm1PDF(doc, form1Data, userName, sigDir);
+
+    // Generate Form 2 PDF (Page 2)
+    generateForm2PDF(doc, form2Data, userName, sigDir);
+
+    // Generate Form 3 PDF (Page 3)
+    generateForm3PDF(doc, form3Data, userName, sigDir);
 
     doc.end();
     
     stream.on('finish', () => {
-      resolve(filePath);
+      // Add a small delay to ensure PDF has fully released the signature files
+      setTimeout(() => {
+        // Delete all signature files after PDF is successfully generated
+        let deletedCount = 0;
+        signatureFiles.forEach(sigPath => {
+          try {
+            if (fs.existsSync(sigPath)) {
+              fs.unlinkSync(sigPath);
+              console.log(`✓ Deleted signature: ${path.basename(sigPath)}`);
+              deletedCount++;
+            } else {
+              console.log(`⚠ Signature not found: ${path.basename(sigPath)}`);
+            }
+          } catch (err) {
+            console.error(`✗ Failed to delete signature: ${path.basename(sigPath)}`, err.message);
+          }
+        });
+        
+        console.log(`✓ PDF generated successfully. Deleted ${deletedCount} of ${signatureFiles.length} signature(s)`);
+        resolve(filePath);
+      }, 100); // 100ms delay to ensure file handles are released
     });
     
     stream.on('error', (err) => {
@@ -321,8 +280,8 @@ const sendCompletionEmail = async (userEmail, userName, diveCenterEmail, pdfPath
 
 // Serve signature images
 app.use('/signatures', express.static(sigDir));
-// Serve previews
-app.use('/previews', express.static(previewDir));
+// Serve PDFs
+app.use('/pdfs', express.static(pdfsDir));
 
 app.post('/api/forms', (req, res) => {
   const { userId, title, signature } = req.body;
@@ -456,7 +415,7 @@ app.get('/api/form-status/:userId', (req, res) => {
 
 // Templates listing (reads server/templates directory)
 app.get('/api/templates', (req, res) => {
-  const templatesDir = path.join(process.cwd(), 'server', 'templates');
+  const templatesDir = path.join(__dirname, 'templates');
   if (!fs.existsSync(templatesDir)) return res.json([]);
   const files = fs.readdirSync(templatesDir).filter(f => f.endsWith('.pdf'));
   const rows = files.map((f, i) => ({ id: i + 1, name: f, file_path: path.join('server', 'templates', f) }));
@@ -465,7 +424,7 @@ app.get('/api/templates', (req, res) => {
 
 // Serve template file
 app.get('/api/template/:name', (req, res) => {
-  const templatesDir = path.join(process.cwd(), 'server', 'templates');
+  const templatesDir = path.join(__dirname, 'templates');
   const name = req.params.name;
   const filePath = path.join(templatesDir, name);
   if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
@@ -546,13 +505,14 @@ app.get('/api/draft/:userId/:step', (req, res) => {
 // Preview filled form as a simple PDF (generates a very basic PDF from JSON data)
 app.get('/api/preview/:userId/:step', (req, res) => {
   const { userId, step } = req.params;
+  
   db.query('SELECT data FROM drafts WHERE user_id = ? AND form_step = ? ORDER BY updated_at DESC LIMIT 1', [userId, step], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!rows.length) return res.status(404).json({ error: 'No draft' });
     const data = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
     const doc = new PDFDocument();
-    const filename = `preview_${userId}_${step}_${Date.now()}.pdf`;
-    const filePath = path.join(previewDir, filename);
+    const filename = `FormStep${step}_preview_${userId}_${Date.now()}.pdf`;
+    const filePath = path.join(pdfsDir, filename);
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
     doc.fontSize(18).text(`Preview - Form ${step}`, { align: 'center' });
